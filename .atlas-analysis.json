@@ -1,0 +1,248 @@
+{
+  "projectType": "sdk-library",
+  "projectName": "TanStack Query",
+  "projectDescription": "Powerful asynchronous state management, server-state utilities and data fetching for the web",
+  "theme": "palm",
+  "primaryColor": "#FF4154",
+  "lightColor": null,
+  "darkColor": null,
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Get Started",
+        "groups": [
+          {
+            "group": "Introduction",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Essentials",
+            "pages": [
+              "essentials/overview",
+              "essentials/typescript",
+              "essentials/devtools"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Guides",
+        "groups": [
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "guides/queries",
+              "guides/mutations",
+              "guides/query-keys",
+              "guides/query-functions",
+              "guides/network-mode"
+            ]
+          },
+          {
+            "group": "Caching & Updates",
+            "pages": [
+              "guides/caching",
+              "guides/important-defaults",
+              "guides/invalidations-from-mutations",
+              "guides/optimistic-updates",
+              "guides/background-fetching-indicators"
+            ]
+          },
+          {
+            "group": "Advanced Patterns",
+            "pages": [
+              "guides/infinite-queries",
+              "guides/paginated-queries",
+              "guides/parallel-queries",
+              "guides/dependent-queries",
+              "guides/disabling-queries",
+              "guides/query-cancellation"
+            ]
+          },
+          {
+            "group": "Data Management",
+            "pages": [
+              "guides/initial-query-data",
+              "guides/placeholder-query-data",
+              "guides/prefetching",
+              "guides/default-query-function",
+              "guides/filters"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Framework Adapters",
+        "groups": [
+          {
+            "group": "React",
+            "pages": [
+              "frameworks/react/overview",
+              "frameworks/react/installation",
+              "frameworks/react/quick-start",
+              "frameworks/react/typescript",
+              "frameworks/react/devtools",
+              "frameworks/react/react-native",
+              "frameworks/react/graphql",
+              "frameworks/react/ssr"
+            ]
+          },
+          {
+            "group": "Vue",
+            "pages": [
+              "frameworks/vue/overview",
+              "frameworks/vue/installation",
+              "frameworks/vue/quick-start",
+              "frameworks/vue/typescript",
+              "frameworks/vue/devtools"
+            ]
+          },
+          {
+            "group": "Solid",
+            "pages": [
+              "frameworks/solid/overview",
+              "frameworks/solid/installation",
+              "frameworks/solid/quick-start",
+              "frameworks/solid/typescript",
+              "frameworks/solid/devtools"
+            ]
+          },
+          {
+            "group": "Svelte",
+            "pages": [
+              "frameworks/svelte/overview",
+              "frameworks/svelte/installation",
+              "frameworks/svelte/quick-start",
+              "frameworks/svelte/typescript",
+              "frameworks/svelte/devtools"
+            ]
+          },
+          {
+            "group": "Angular",
+            "pages": [
+              "frameworks/angular/overview",
+              "frameworks/angular/installation",
+              "frameworks/angular/quick-start",
+              "frameworks/angular/devtools"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Core",
+            "pages": [
+              "api/query-client",
+              "api/query-cache",
+              "api/mutation-cache",
+              "api/query-observer",
+              "api/infinite-query-observer",
+              "api/queries-observer",
+              "api/mutation-observer"
+            ]
+          },
+          {
+            "group": "React API",
+            "pages": [
+              "api/react/use-query",
+              "api/react/use-infinite-query",
+              "api/react/use-mutation",
+              "api/react/use-queries",
+              "api/react/use-suspense-query",
+              "api/react/use-query-client",
+              "api/react/query-client-provider",
+              "api/react/hydration-boundary"
+            ]
+          },
+          {
+            "group": "Managers",
+            "pages": [
+              "api/focus-manager",
+              "api/online-manager",
+              "api/notify-manager"
+            ]
+          },
+          {
+            "group": "Utilities",
+            "pages": [
+              "api/hydration",
+              "api/utilities"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Community",
+        "groups": [
+          {
+            "group": "Resources",
+            "pages": [
+              "community/community-resources",
+              "community/comparison"
+            ]
+          },
+          {
+            "group": "ESLint Plugin",
+            "pages": [
+              "eslint/eslint-plugin-query",
+              "eslint/exhaustive-deps",
+              "eslint/stable-query-client"
+            ]
+          },
+          {
+            "group": "Migration Guides",
+            "pages": [
+              "migration/migrating-to-v5",
+              "migration/migrating-to-v4",
+              "migration/migrating-to-v3"
+            ]
+          },
+          {
+            "group": "Plugins",
+            "pages": [
+              "plugins/persist-client",
+              "plugins/broadcast-client"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Framework-agnostic core with adapters for React, Vue, Solid, Svelte, and Angular",
+    "Automatic caching and background refetching with intelligent cache invalidation",
+    "Infinite queries and pagination support for large datasets",
+    "Optimistic updates and mutations with automatic rollback on error",
+    "Request deduplication and parallel query execution",
+    "TypeScript support with full type inference",
+    "Built-in devtools for debugging query state",
+    "SSR and React Suspense support",
+    "Plugin ecosystem for persistence and client synchronization"
+  ],
+  "publicApiSurface": [
+    "QueryClient",
+    "QueryCache",
+    "MutationCache",
+    "useQuery",
+    "useMutation",
+    "useInfiniteQuery",
+    "useQueries",
+    "useSuspenseQuery",
+    "QueryClientProvider",
+    "HydrationBoundary",
+    "QueryObserver",
+    "InfiniteQueryObserver",
+    "MutationObserver",
+    "focusManager",
+    "onlineManager",
+    "notifyManager",
+    "hydrate",
+    "dehydrate"
+  ]
+}
