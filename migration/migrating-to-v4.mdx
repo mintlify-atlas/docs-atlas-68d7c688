@@ -1,0 +1,549 @@
+---
+title: Migrating to TanStack Query v4
+description: Complete migration guide for upgrading from v3 to v4 with breaking changes and new features
+---
+
+v4 is a major version with breaking changes. This guide covers everything you need to know to migrate from v3.
+
+## Package Rename
+
+### react-query → @tanstack/react-query
+
+The package has been renamed and moved to the TanStack organization:
+
+<CodeGroup>
+```bash Uninstall Old Package
+npm uninstall react-query
+```
+
+```bash Install New Package
+npm install @tanstack/react-query
+npm install @tanstack/react-query-devtools
+```
+</CodeGroup>
+
+### Update Imports
+
+<CodeGroup>
+```typescript Before (v3)
+import { useQuery } from 'react-query'
+import { ReactQueryDevtools } from 'react-query/devtools'
+```
+
+```typescript After (v4)
+import { useQuery } from '@tanstack/react-query'
+import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
+```
+</CodeGroup>
+
+#### Codemod Available
+
+<CodeGroup>
+```bash JavaScript
+npx jscodeshift ./path/to/src/ \
+  --extensions=js,jsx \
+  --transform=./node_modules/@tanstack/react-query/codemods/v4/replace-import-specifier.js
+```
+
+```bash TypeScript
+npx jscodeshift ./path/to/src/ \
+  --extensions=ts,tsx \
+  --parser=tsx \
+  --transform=./node_modules/@tanstack/react-query/codemods/v4/replace-import-specifier.js
+```
+</CodeGroup>
+
+<Note>
+  The codemod only changes imports. You must install the new packages manually.
+</Note>
+
+## Breaking Changes
+
+### Query Keys Must Be Arrays
+
+All query and mutation keys must be arrays:
+
+<CodeGroup>
+```typescript Before (v3)
+useQuery('todos', fetchTodos)
+useQuery(['todos', { status }], fetchTodos)
+```
+
+```typescript After (v4)
+useQuery(['todos'], fetchTodos)
+useQuery(['todos', { status }], fetchTodos)
+```
+</CodeGroup>
+
+#### Codemod Available
+
+<CodeGroup>
+```bash JavaScript
+npx jscodeshift ./path/to/src/ \
+  --extensions=js,jsx \
+  --transform=./node_modules/@tanstack/react-query/codemods/v4/key-transformation.js
+```
+
+```bash TypeScript
+npx jscodeshift ./path/to/src/ \
+  --extensions=ts,tsx \
+  --parser=tsx \
+  --transform=./node_modules/@tanstack/react-query/codemods/v4/key-transformation.js
+```
+</CodeGroup>
+
+### `idle` State Removed
+
+The `idle` state has been replaced with `loading` + `fetchStatus: 'idle'`:
+
+<CodeGroup>
+```typescript Before (v3)
+const { status } = useQuery(['todos'], fetchTodos, { enabled: false })
+
+if (status === 'idle') {
+  return <div>Not ready...</div>
+}
+```
+
+```typescript After (v4)
+const { status, fetchStatus } = useQuery({
+  queryKey: ['todos'],
+  queryFn: fetchTodos,
+  enabled: false,
+})
+
+if (status === 'loading' && fetchStatus === 'idle') {
+  return <div>Not ready...</div>
+}
+
+// Or use isInitialLoading
+if (isInitialLoading) {
+  return <div>Loading...</div>
+}
+```
+</CodeGroup>
+
+<Accordion title="Why two states?">
+  `status` reflects the data state (loading/success/error), while `fetchStatus` reflects the fetch state (idle/fetching/paused). This provides better offline support and more granular control.
+</Accordion>
+
+### New `useQueries` API
+
+<CodeGroup>
+```typescript Before (v3)
+useQueries([
+  { queryKey: ['post', 1], queryFn: fetchPost },
+  { queryKey: ['post', 2], queryFn: fetchPost },
+])
+```
+
+```typescript After (v4)
+useQueries({
+  queries: [
+    { queryKey: ['post', 1], queryFn: fetchPost },
+    { queryKey: ['post', 2], queryFn: fetchPost },
+  ],
+})
+```
+</CodeGroup>
+
+### `undefined` is Illegal for Successful Queries
+
+Query functions cannot return `undefined`:
+
+<CodeGroup>
+```typescript Before (v3)
+// Accidentally returns undefined
+useQuery(['todos'], () =>
+  axios.get('/todos').then((result) => console.log(result.data))
+)
+```
+
+```typescript After (v4)
+// TypeScript error: Query function must return a value
+// Runtime: Promise rejects with an error
+useQuery({
+  queryKey: ['todos'],
+  queryFn: async () => {
+    const result = await axios.get('/todos')
+    return result.data // ✅ Return the data
+  },
+})
+```
+</CodeGroup>
+
+<Warning>
+  If your query function returns `undefined`, the query will error and the error will be logged in development.
+</Warning>
+
+### Network Mode: Queries Need Network by Default
+
+<CodeGroup>
+```typescript Before (v3)
+// Queries/mutations ran even offline
+const { data } = useQuery(['todos'], fetchTodos)
+```
+
+```typescript After (v4)
+// Queries pause when offline (networkMode: 'online')
+const { data } = useQuery({
+  queryKey: ['todos'],
+  queryFn: fetchTodos,
+})
+
+// To get v3 behavior:
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      networkMode: 'offlineFirst',
+    },
+  },
+})
+```
+</CodeGroup>
+
+Three network modes:
+- `online` (default): Requires network connection
+- `offlineFirst`: Like v3, always runs
+- `always`: Runs even when marked offline
+
+### `notifyOnChangeProps` Default Changed
+
+<CodeGroup>
+```typescript Before (v3)
+// Default: re-render on any query change
+useQuery(['todos'], fetchTodos)
+
+// Opt-in to tracking
+useQuery(['todos'], fetchTodos, {
+  notifyOnChangeProps: 'tracked',
+})
+```
+
+```typescript After (v4)
+// Default: smart tracking (only re-render when accessed properties change)
+useQuery({
+  queryKey: ['todos'],
+  queryFn: fetchTodos,
+})
+
+// Opt-out: re-render on any change
+useQuery({
+  queryKey: ['todos'],
+  queryFn: fetchTodos,
+  notifyOnChangeProps: 'all',
+})
+```
+</CodeGroup>
+
+### `notifyOnChangePropsExclusions` Removed
+
+Now that tracking is default, this option is no longer needed.
+
+### `cancelRefetch` Now Defaults to `true`
+
+<CodeGroup>
+```typescript Before (v3)
+// Multiple refetches allowed in parallel (last one wins)
+queryClient.refetchQueries(['todos'])
+queryClient.refetchQueries(['todos'])
+```
+
+```typescript After (v4)
+// Second refetch cancels first (more predictable)
+queryClient.refetchQueries({ queryKey: ['todos'] })
+queryClient.refetchQueries({ queryKey: ['todos'] }) // cancels above
+
+// Opt-out of cancellation
+queryClient.refetchQueries(
+  { queryKey: ['todos'] },
+  { cancelRefetch: false }
+)
+```
+</CodeGroup>
+
+### Query Filters Unified
+
+<CodeGroup>
+```typescript Before (v3)
+queryClient.invalidateQueries(['todos'], {
+  active: true,
+  inactive: false,
+  refetchActive: true,
+  refetchInactive: false,
+})
+```
+
+```typescript After (v4)
+queryClient.invalidateQueries({
+  queryKey: ['todos'],
+  type: 'active', // 'active' | 'inactive' | 'all'
+  refetchType: 'active', // 'active' | 'inactive' | 'all' | 'none'
+})
+```
+</CodeGroup>
+
+### `onSuccess` Not Called from `setQueryData`
+
+<CodeGroup>
+```typescript Before (v3)
+useQuery({
+  queryKey: ['todos'],
+  queryFn: fetchTodos,
+  onSuccess: (data) => {
+    console.log('This runs on fetch AND setQueryData')
+  },
+})
+```
+
+```typescript After (v4)
+const { data } = useQuery({
+  queryKey: ['todos'],
+  queryFn: fetchTodos,
+})
+
+// Use useEffect to watch data changes
+useEffect(() => {
+  if (data) {
+    console.log('Data changed', data)
+  }
+}, [data])
+```
+</CodeGroup>
+
+### Persister Plugins Renamed
+
+<CodeGroup>
+```typescript Before (v3)
+import { persistQueryClient } from 'react-query/persistQueryClient-experimental'
+import { createWebStoragePersistor } from 'react-query/createWebStoragePersistor-experimental'
+```
+
+```typescript After (v4)
+import { persistQueryClient } from '@tanstack/react-query-persist-client'
+import { createSyncStoragePersister } from '@tanstack/query-sync-storage-persister'
+import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister'
+```
+</CodeGroup>
+
+### Promise `cancel` Method Removed
+
+Use `AbortController` for query cancellation:
+
+<CodeGroup>
+```typescript Before (v3)
+const promise = fetchTodos()
+promise.cancel = () => {
+  // custom cancellation
+}
+```
+
+```typescript After (v4)
+const queryFn = async ({ signal }: QueryFunctionContext) => {
+  const response = await fetch('/api/todos', { signal })
+  return response.json()
+}
+
+useQuery({ queryKey: ['todos'], queryFn })
+```
+</CodeGroup>
+
+### TypeScript 4.1+ Required
+
+TypeScript 4.1 or higher is now required.
+
+### `setLogger` Moved to QueryClient
+
+<CodeGroup>
+```typescript Before (v3)
+import { setLogger } from 'react-query'
+
+setLogger(customLogger)
+const queryClient = new QueryClient()
+```
+
+```typescript After (v4)
+import { QueryClient } from '@tanstack/react-query'
+
+const queryClient = new QueryClient({
+  logger: customLogger,
+})
+```
+</CodeGroup>
+
+### Server-Side: No Manual Garbage Collection
+
+On the server, `gcTime` now defaults to `Infinity` instead of `5 minutes`:
+
+```typescript
+// In v4, server-side queries don't garbage collect by default
+// The Node.js process clears everything when request completes
+
+// To restore v3 behavior:
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      gcTime: 5 * 60 * 1000, // 5 minutes
+    },
+  },
+})
+```
+
+### No Logging in Production
+
+Errors are no longer logged to console in production mode. They still appear in development.
+
+### Hydration Exports Consolidated
+
+<CodeGroup>
+```typescript Before (v3)
+import { dehydrate, hydrate } from 'react-query/hydration'
+```
+
+```typescript After (v4)
+import { dehydrate, hydrate } from '@tanstack/react-query'
+```
+</CodeGroup>
+
+### `src/react` Renamed to `src/reactjs`
+
+If you imported from `react-query/react`:
+
+<CodeGroup>
+```typescript Before (v3)
+import { QueryClientProvider } from 'react-query/react'
+```
+
+```typescript After (v4)
+import { QueryClientProvider } from '@tanstack/react-query/reactjs'
+```
+</CodeGroup>
+
+## New Features
+
+### React 18 Support
+
+Full support for React 18 and concurrent features.
+
+### Proper Offline Support
+
+New `networkMode` option provides fine-grained control:
+
+```typescript
+useQuery({
+  queryKey: ['todos'],
+  queryFn: fetchTodos,
+  networkMode: 'online', // 'online' | 'offlineFirst' | 'always'
+})
+```
+
+### Tracked Queries by Default
+
+Automatic render optimization:
+
+```typescript
+const { data, isLoading } = useQuery({
+  queryKey: ['todos'],
+  queryFn: fetchTodos,
+})
+
+// Only re-renders when data or isLoading changes
+// (because those are the only properties accessed)
+```
+
+### Bail Out of `setQueryData`
+
+```typescript
+queryClient.setQueryData(['todo', id], (previousTodo) =>
+  previousTodo ? { ...previousTodo, done: true } : undefined
+)
+
+// Returning undefined prevents the update
+```
+
+### Mutation Garbage Collection
+
+Mutations now have `gcTime` (default 5 minutes):
+
+```typescript
+const mutation = useMutation({
+  mutationFn: addTodo,
+  gcTime: 10 * 60 * 1000, // Keep for 10 minutes
+})
+```
+
+### Custom Contexts for Multiple Providers
+
+```typescript
+const context = React.createContext<QueryClient | undefined>(undefined)
+const queryClient = new QueryClient()
+
+function App() {
+  return (
+    <QueryClientProvider client={queryClient} context={context}>
+      <Component />
+    </QueryClientProvider>
+  )
+}
+
+function Component() {
+  const { data } = useQuery(
+    {
+      queryKey: ['user'],
+      queryFn: fetchUser,
+      context, // Use specific context
+    }
+  )
+}
+```
+
+## Migration Checklist
+
+<Steps>
+  <Step title="Update Package">
+    ```bash
+    npm uninstall react-query
+    npm install @tanstack/react-query @tanstack/react-query-devtools
+    ```
+  </Step>
+
+  <Step title="Run Import Codemod">
+    Update all import statements.
+  </Step>
+
+  <Step title="Run Key Transformation Codemod">
+    Convert string keys to array keys.
+  </Step>
+
+  <Step title="Update Query Options">
+    Wrap all options in objects if not already done.
+  </Step>
+
+  <Step title="Replace idle Checks">
+    Use `isInitialLoading` or `fetchStatus === 'idle'`.
+  </Step>
+
+  <Step title="Update useQueries">
+    Wrap query arrays in `{ queries: [...] }`.
+  </Step>
+
+  <Step title="Move onSuccess to useEffect">
+    Replace `onSuccess` callbacks with `useEffect`.
+  </Step>
+
+  <Step title="Update Persister Imports">
+    Use new persister package names.
+  </Step>
+
+  <Step title="Test Offline Behavior">
+    Verify queries behave correctly when offline.
+  </Step>
+
+  <Step title="Test Everything">
+    Thoroughly test all query and mutation functionality.
+  </Step>
+</Steps>
+
+<Note>
+  v4 brings significant improvements to offline support, TypeScript types, and render optimization. The migration effort is worth it!
+</Note>

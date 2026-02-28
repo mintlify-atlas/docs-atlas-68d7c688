@@ -1,0 +1,349 @@
+---
+title: DevTools
+description: Visualize and debug your queries with TanStack Query DevTools
+---
+
+# DevTools
+
+TanStack Query DevTools help you visualize all of the inner workings of TanStack Query and will likely save you hours of debugging.
+
+## Installation
+
+DevTools are available as a separate package:
+
+<CodeGroup>
+```bash npm
+npm install @tanstack/react-query-devtools
+```
+
+```bash yarn
+yarn add @tanstack/react-query-devtools
+```
+
+```bash pnpm
+pnpm add @tanstack/react-query-devtools
+```
+
+```bash bun
+bun add @tanstack/react-query-devtools
+```
+</CodeGroup>
+
+<Note>
+  DevTools are automatically excluded from production bundles through tree-shaking, so you don't need to worry about bundle size.
+</Note>
+
+## Basic Setup
+
+Add the DevTools component to your app:
+
+```tsx
+import React from 'react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
+
+const queryClient = new QueryClient()
+
+function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      {/* Your app components */}
+      <ReactQueryDevtools initialIsOpen={false} />
+    </QueryClientProvider>
+  )
+}
+```
+
+<Tip>
+  Place the DevTools component inside `QueryClientProvider` but outside your main app content for best results.
+</Tip>
+
+## DevTools Options
+
+Customize the DevTools behavior with these props:
+
+```tsx
+<ReactQueryDevtools
+  initialIsOpen={false}        // Start with panel closed
+  buttonPosition="bottom-left" // Position of toggle button
+  position="bottom"            // Position of panel
+  client={queryClient}         // Specify QueryClient (optional)
+/>
+```
+
+### Available Props
+
+- **`initialIsOpen`** (`boolean`) - Start with DevTools open or closed. Default: `false`
+- **`buttonPosition`** (`'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'`) - Position of the toggle button. Default: `'bottom-right'`
+- **`position`** (`'top' | 'bottom' | 'left' | 'right'`) - Position of the DevTools panel. Default: `'bottom'`
+- **`client`** (`QueryClient`) - Custom QueryClient instance (uses context by default)
+
+## DevTools Panel
+
+For more control, use `ReactQueryDevtoolsPanel` to embed DevTools in your own UI:
+
+```tsx
+import React from 'react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { ReactQueryDevtoolsPanel } from '@tanstack/react-query-devtools'
+
+const queryClient = new QueryClient()
+
+function App() {
+  const [isOpen, setIsOpen] = React.useState(false)
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <div>
+        <button onClick={() => setIsOpen(!isOpen)}>
+          {isOpen ? 'Close' : 'Open'} DevTools
+        </button>
+        {isOpen && (
+          <ReactQueryDevtoolsPanel 
+            onClose={() => setIsOpen(false)}
+            style={{ height: '400px' }}
+          />
+        )}
+      </div>
+      {/* Your app components */}
+    </QueryClientProvider>
+  )
+}
+```
+
+<Warning>
+  When using the panel directly, you're responsible for managing its visibility state.
+</Warning>
+
+## Using DevTools
+
+Once installed, the DevTools provide powerful debugging capabilities:
+
+### Query Inspector
+
+View all queries in your application:
+
+- **Active queries** - Currently mounted and subscribed
+- **Inactive queries** - No subscribers but still cached
+- **Stale queries** - Need to be refetched
+- **Fresh queries** - Recently fetched and up-to-date
+
+### Query Details
+
+Click any query to see:
+
+- Query key and hash
+- Query status and fetch status  
+- Data preview (JSON viewer)
+- Last updated timestamp
+- Observers count
+- Data/error information
+
+### Actions
+
+Perform actions directly from DevTools:
+
+- **Refetch** - Manually trigger a refetch
+- **Invalidate** - Mark query as stale
+- **Reset** - Reset query to initial state
+- **Remove** - Remove query from cache
+
+<Tip>
+  Use the search box to filter queries by key. This is especially helpful in large applications with many queries.
+</Tip>
+
+## Production Builds
+
+DevTools are automatically tree-shaken in production:
+
+```tsx
+// This code will be removed in production builds
+import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
+
+function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <YourApp />
+      <ReactQueryDevtools />
+    </QueryClientProvider>
+  )
+}
+```
+
+### Lazy Loading (Optional)
+
+For even smaller development bundles, lazy load DevTools:
+
+```tsx
+import React from 'react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+
+const queryClient = new QueryClient()
+
+// Lazy load DevTools
+const ReactQueryDevtoolsProduction = React.lazy(() =>
+  import('@tanstack/react-query-devtools/production').then((d) => ({
+    default: d.ReactQueryDevtools,
+  }))
+)
+
+function App() {
+  const [showDevtools, setShowDevtools] = React.useState(false)
+
+  React.useEffect(() => {
+    // @ts-ignore
+    window.toggleDevtools = () => setShowDevtools((old) => !old)
+  }, [])
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <YourApp />
+      {showDevtools && (
+        <React.Suspense fallback={null}>
+          <ReactQueryDevtoolsProduction />
+        </React.Suspense>
+      )}
+    </QueryClientProvider>
+  )
+}
+```
+
+Then toggle in the browser console:
+
+```js
+window.toggleDevtools()
+```
+
+<Note>
+  Lazy loading DevTools is useful for large applications where you want to minimize the development bundle size.
+</Note>
+
+## DevTools Features
+
+### Query Status Colors
+
+Queries are color-coded by status:
+
+- **Green** - Fresh data
+- **Yellow** - Stale data
+- **Gray** - Inactive query
+- **Blue** - Currently fetching
+- **Red** - Error state
+
+### Query Filters
+
+Filter queries by status:
+
+- Show all queries
+- Show only active queries
+- Show only inactive queries
+- Show only stale queries
+- Show only fresh queries
+
+### Mutation Tracking
+
+View all mutations:
+
+- Mutation status (idle, pending, error, success)
+- Variables passed to mutation
+- Mutation result
+- Error information
+
+## Keyboard Shortcuts
+
+DevTools support keyboard shortcuts for quick access:
+
+- **`Esc`** - Close DevTools panel
+- **`Ctrl/Cmd + /`** - Focus search box
+
+## Best Practices
+
+<Steps>
+  <Step title="Keep DevTools open during development">
+    Having DevTools visible helps you understand query behavior and catch caching issues early.
+  </Step>
+
+  <Step title="Check query keys frequently">
+    Verify your query keys are structured correctly to avoid cache misses.
+  </Step>
+
+  <Step title="Monitor stale time">
+    Watch when queries become stale to tune your `staleTime` configuration.
+  </Step>
+
+  <Step title="Inspect cache before adding">
+    Before adding new queries, check if similar data exists in the cache.
+  </Step>
+</Steps>
+
+## Troubleshooting
+
+### DevTools not appearing
+
+Ensure:
+
+1. DevTools are inside `QueryClientProvider`
+2. You're in development mode
+3. The package is installed correctly
+
+```tsx
+// ✅ Correct
+<QueryClientProvider client={queryClient}>
+  <App />
+  <ReactQueryDevtools />
+</QueryClientProvider>
+
+// ❌ Wrong - outside provider
+<QueryClientProvider client={queryClient}>
+  <App />
+</QueryClientProvider>
+<ReactQueryDevtools />
+```
+
+### DevTools showing no queries
+
+- Make sure components using `useQuery` are mounted
+- Check that queries aren't immediately garbage collected (increase `gcTime`)
+
+### Performance issues with many queries
+
+- Use query filters to show only relevant queries
+- Consider lazy loading DevTools
+- Close DevTools when not actively debugging
+
+<Tip>
+  If you have hundreds of queries, consider organizing them with consistent naming patterns to make filtering easier.
+</Tip>
+
+## Framework-Specific DevTools
+
+DevTools are available for other frameworks too:
+
+### Vue Query
+
+```bash
+pnpm add @tanstack/vue-query-devtools
+```
+
+### Svelte Query
+
+```bash
+pnpm add @tanstack/svelte-query-devtools
+```
+
+### Solid Query
+
+```bash
+pnpm add @tanstack/solid-query-devtools
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Essential Concepts" icon="book" href="/essentials/overview">
+    Learn core concepts to make the most of DevTools
+  </Card>
+  <Card title="TypeScript" icon="code" href="/essentials/typescript">
+    Use DevTools with full TypeScript support
+  </Card>
+</CardGroup>

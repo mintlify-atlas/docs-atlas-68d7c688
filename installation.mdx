@@ -1,0 +1,254 @@
+---
+title: Installation
+description: Install TanStack Query in your project
+---
+
+# Installation
+
+Install TanStack Query using your preferred package manager. The library is available for multiple frameworks.
+
+## React Query
+
+For React applications, install `@tanstack/react-query`:
+
+<CodeGroup>
+```bash npm
+npm install @tanstack/react-query
+```
+
+```bash yarn
+yarn add @tanstack/react-query
+```
+
+```bash pnpm
+pnpm add @tanstack/react-query
+```
+
+```bash bun
+bun add @tanstack/react-query
+```
+</CodeGroup>
+
+<Note>
+  TanStack React Query requires React 18 or 19 as a peer dependency.
+</Note>
+
+## DevTools (Optional)
+
+The DevTools package helps you visualize and debug your queries during development:
+
+<CodeGroup>
+```bash npm
+npm install @tanstack/react-query-devtools
+```
+
+```bash yarn
+yarn add @tanstack/react-query-devtools
+```
+
+```bash pnpm
+pnpm add @tanstack/react-query-devtools
+```
+
+```bash bun
+bun add @tanstack/react-query-devtools
+```
+</CodeGroup>
+
+<Tip>
+  DevTools are included in the main package bundle but tree-shake away in production builds automatically.
+</Tip>
+
+## Other Frameworks
+
+### Vue Query
+
+For Vue 3 applications:
+
+<CodeGroup>
+```bash npm
+npm install @tanstack/vue-query
+```
+
+```bash yarn
+yarn add @tanstack/vue-query
+```
+
+```bash pnpm
+pnpm add @tanstack/vue-query
+```
+
+```bash bun
+bun add @tanstack/vue-query
+```
+</CodeGroup>
+
+### Svelte Query
+
+For Svelte applications:
+
+<CodeGroup>
+```bash npm
+npm install @tanstack/svelte-query
+```
+
+```bash yarn
+yarn add @tanstack/svelte-query
+```
+
+```bash pnpm
+pnpm add @tanstack/svelte-query
+```
+
+```bash bun
+bun add @tanstack/svelte-query
+```
+</CodeGroup>
+
+### Solid Query
+
+For SolidJS applications:
+
+<CodeGroup>
+```bash npm
+npm install @tanstack/solid-query
+```
+
+```bash yarn
+yarn add @tanstack/solid-query
+```
+
+```bash pnpm
+pnpm add @tanstack/solid-query
+```
+
+```bash bun
+bun add @tanstack/solid-query
+```
+</CodeGroup>
+
+### Angular Query (Experimental)
+
+For Angular applications:
+
+<CodeGroup>
+```bash npm
+npm install @tanstack/angular-query-experimental
+```
+
+```bash yarn
+yarn add @tanstack/angular-query-experimental
+```
+
+```bash pnpm
+pnpm add @tanstack/angular-query-experimental
+```
+
+```bash bun
+bun add @tanstack/angular-query-experimental
+```
+</CodeGroup>
+
+<Warning>
+  Angular Query is currently experimental. The API may change in future releases.
+</Warning>
+
+## Optional Packages
+
+### Persist Client
+
+Persist and sync your query cache to localStorage, sessionStorage, or AsyncStorage:
+
+<CodeGroup>
+```bash npm
+npm install @tanstack/react-query-persist-client @tanstack/query-sync-storage-persister
+```
+
+```bash yarn
+yarn add @tanstack/react-query-persist-client @tanstack/query-sync-storage-persister
+```
+
+```bash pnpm
+pnpm add @tanstack/react-query-persist-client @tanstack/query-sync-storage-persister
+```
+
+```bash bun
+bun add @tanstack/react-query-persist-client @tanstack/query-sync-storage-persister
+```
+</CodeGroup>
+
+For React Native or async storage:
+
+<CodeGroup>
+```bash npm
+npm install @tanstack/react-query-persist-client @tanstack/query-async-storage-persister
+```
+
+```bash yarn
+yarn add @tanstack/react-query-persist-client @tanstack/query-async-storage-persister
+```
+
+```bash pnpm
+pnpm add @tanstack/react-query-persist-client @tanstack/query-async-storage-persister
+```
+
+```bash bun
+bun add @tanstack/react-query-persist-client @tanstack/query-async-storage-persister
+```
+</CodeGroup>
+
+### ESLint Plugin
+
+Enforce best practices and catch common mistakes:
+
+<CodeGroup>
+```bash npm
+npm install -D @tanstack/eslint-plugin-query
+```
+
+```bash yarn
+yarn add -D @tanstack/eslint-plugin-query
+```
+
+```bash pnpm
+pnpm add -D @tanstack/eslint-plugin-query
+```
+
+```bash bun
+bun add -D @tanstack/eslint-plugin-query
+```
+</CodeGroup>
+
+## CDN Usage
+
+For quick prototyping or simple projects, you can use TanStack Query via CDN:
+
+```html
+<script type="module">
+  import { QueryClient, QueryClientProvider, useQuery } from 'https://esm.sh/@tanstack/react-query'
+</script>
+```
+
+<Warning>
+  CDN usage is not recommended for production applications. Use a package manager for better performance and reliability.
+</Warning>
+
+## Requirements
+
+- **React Query**: React 18+
+- **Vue Query**: Vue 3+
+- **Svelte Query**: Svelte 4+
+- **Solid Query**: SolidJS 1.6+
+- **Node.js**: 16+ (for development)
+
+## TypeScript
+
+TanStack Query is written in TypeScript and includes type definitions out of the box. No additional `@types` packages are needed.
+
+<Tip>
+  For the best TypeScript experience, use TypeScript 5.0 or later.
+</Tip>
+
+## Next Steps
+
+Now that you've installed TanStack Query, check out the [Quick Start guide](/quickstart) to build your first query.

@@ -1,0 +1,487 @@
+---
+title: Mutations
+description: Complete guide to performing side effects and updating data with TanStack Query
+---
+
+Mutations are used for creating, updating, or deleting data. Unlike queries, mutations are typically used to perform side effects on the server.
+
+## Basic Mutation
+
+Use the `useMutation` hook to perform mutations:
+
+```tsx
+import { useMutation } from '@tanstack/react-query'
+
+function CreateTodo() {
+  const mutation = useMutation({
+    mutationFn: async (newTodo) => {
+      const response = await fetch('/api/todos', {
+        method: 'POST',
+        body: JSON.stringify(newTodo),
+        headers: { 'Content-Type': 'application/json' },
+      })
+      return response.json()
+    },
+  })
+
+  return (
+    <div>
+      {mutation.isPending ? (
+        'Creating todo...'
+      ) : (
+        <>
+          {mutation.isError && <div>Error: {mutation.error.message}</div>}
+          {mutation.isSuccess && <div>Todo created!</div>}
+          <button
+            onClick={() => {
+              mutation.mutate({ title: 'New Todo' })
+            }}
+          >
+            Create Todo
+          </button>
+        </>
+      )}
+    </div>
+  )
+}
+```
+
+## Mutation Results
+
+The mutation result contains state and functions:
+
+```tsx
+const {
+  // Data
+  data,              // The last successfully resolved data
+  error,             // The error object if mutation failed
+  variables,         // The variables passed to mutationFn
+  
+  // Status
+  status,            // 'idle' | 'pending' | 'error' | 'success'
+  isPending,         // Is the mutation currently pending?
+  isSuccess,         // Did the mutation succeed?
+  isError,           // Did the mutation fail?
+  isIdle,            // Is the mutation idle?
+  isPaused,          // Is the mutation paused?
+  
+  // Functions
+  mutate,            // Trigger the mutation
+  mutateAsync,       // Trigger and return a promise
+  reset,             // Reset mutation state
+  
+  // Metadata  
+  submittedAt,       // Timestamp when mutation was submitted
+  failureCount,      // Number of consecutive failures
+  failureReason,     // The error from last failed attempt
+} = useMutation({ mutationFn: createTodo })
+```
+
+## Mutation vs MutateAsync
+
+<Tabs>
+  <Tab title="mutate">
+    ```tsx
+    const mutation = useMutation({
+      mutationFn: createTodo,
+    })
+
+    // Fire and forget - errors are caught internally
+    mutation.mutate({ title: 'New Todo' })
+    ```
+  </Tab>
+  <Tab title="mutateAsync">
+    ```tsx
+    const mutation = useMutation({
+      mutationFn: createTodo,
+    })
+
+    try {
+      // Returns a promise - you must handle errors
+      const data = await mutation.mutateAsync({ title: 'New Todo' })
+      console.log(data)
+    } catch (error) {
+      console.error(error)
+    }
+    ```
+  </Tab>
+</Tabs>
+
+<Warning>
+With `mutateAsync`, you must handle errors yourself. Unhandled promise rejections will not be caught by TanStack Query's error handling.
+</Warning>
+
+## Mutation Side Effects
+
+Execute callbacks at different stages of the mutation:
+
+```tsx
+useMutation({
+  mutationFn: createTodo,
+  onMutate: async (variables) => {
+    // Called before mutation function
+    console.log('Creating todo:', variables)
+    
+    // Optionally return context for rollback
+    return { id: Date.now() }
+  },
+  onSuccess: (data, variables, context) => {
+    // Called on success
+    console.log('Todo created:', data)
+  },
+  onError: (error, variables, context) => {
+    // Called on error
+    console.error('Failed to create todo:', error)
+  },
+  onSettled: (data, error, variables, context) => {
+    // Always called after success or error
+    console.log('Mutation completed')
+  },
+})
+```
+
+## Invalidating Queries
+
+Invalidate and refetch queries after mutations:
+
+```tsx
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+
+function CreateTodo() {
+  const queryClient = useQueryClient()
+
+  const mutation = useMutation({
+    mutationFn: createTodo,
+    onSuccess: () => {
+      // Invalidate and refetch todos query
+      queryClient.invalidateQueries({ queryKey: ['todos'] })
+    },
+  })
+}
+```
+
+<Note>
+`invalidateQueries` marks queries as stale and triggers a refetch if they are currently being rendered.
+</Note>
+
+## Optimistic Updates
+
+Update the UI before the mutation completes:
+
+```tsx
+function UpdateTodo() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: updateTodo,
+    onMutate: async (newTodo) => {
+      // Cancel outgoing refetches
+      await queryClient.cancelQueries({ queryKey: ['todos'] })
+
+      // Snapshot previous value
+      const previousTodos = queryClient.getQueryData(['todos'])
+
+      // Optimistically update
+      queryClient.setQueryData(['todos'], (old) => {
+        return old.map((todo) =>
+          todo.id === newTodo.id ? newTodo : todo
+        )
+      })
+
+      // Return context with snapshot
+      return { previousTodos }
+    },
+    onError: (err, newTodo, context) => {
+      // Rollback on error
+      queryClient.setQueryData(['todos'], context.previousTodos)
+    },
+    onSettled: () => {
+      // Refetch after error or success
+      queryClient.invalidateQueries({ queryKey: ['todos'] })
+    },
+  })
+}
+```
+
+<Steps>
+  <Step title="Cancel Queries">
+    Cancel any outgoing refetches to prevent them from overwriting optimistic updates.
+  </Step>
+  <Step title="Snapshot">
+    Save the current query data to enable rollback on error.
+  </Step>
+  <Step title="Update">
+    Optimistically update the cache with the expected result.
+  </Step>
+  <Step title="Error Handling">
+    Rollback to the snapshot if the mutation fails.
+  </Step>
+  <Step title="Refetch">
+    Always refetch to ensure data consistency.
+  </Step>
+</Steps>
+
+## Optimistic UI Updates
+
+Show optimistic state in the UI without updating the cache:
+
+```tsx
+function TodoList() {
+  const [text, setText] = React.useState('')
+  const { data: todos } = useQuery({ queryKey: ['todos'], queryFn: fetchTodos })
+
+  const addTodoMutation = useMutation({
+    mutationFn: async (newTodo) => {
+      const response = await fetch('/api/todos', {
+        method: 'POST',
+        body: JSON.stringify({ text: newTodo }),
+        headers: { 'Content-Type': 'application/json' },
+      })
+      if (!response.ok) throw new Error('Failed')
+      return response.json()
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['todos'] }),
+  })
+
+  return (
+    <div>
+      <form onSubmit={(e) => {
+        e.preventDefault()
+        addTodoMutation.mutate(text)
+        setText('')
+      }}>
+        <input value={text} onChange={(e) => setText(e.target.value)} />
+        <button disabled={addTodoMutation.isPending}>Create</button>
+      </form>
+      
+      <ul>
+        {todos?.map((todo) => (
+          <li key={todo.id}>{todo.text}</li>
+        ))}
+        {addTodoMutation.isPending && (
+          <li style={{ opacity: 0.5 }}>{addTodoMutation.variables}</li>
+        )}
+        {addTodoMutation.isError && (
+          <li style={{ color: 'red' }}>
+            {addTodoMutation.variables}
+            <button onClick={() => addTodoMutation.mutate(addTodoMutation.variables)}>
+              Retry
+            </button>
+          </li>
+        )}
+      </ul>
+    </div>
+  )
+}
+```
+
+## Mutation Updates from Responses
+
+Update the cache with the mutation response:
+
+```tsx
+const mutation = useMutation({
+  mutationFn: createTodo,
+  onSuccess: (newTodo) => {
+    // Add the new todo to the cache
+    queryClient.setQueryData(['todos'], (oldTodos) => {
+      return [...oldTodos, newTodo]
+    })
+  },
+})
+```
+
+## Sequential Mutations
+
+Execute mutations one after another:
+
+```tsx
+const createMutation = useMutation({ mutationFn: createTodo })
+const updateMutation = useMutation({ mutationFn: updateTodo })
+
+async function createAndUpdate() {
+  const newTodo = await createMutation.mutateAsync({ title: 'New' })
+  await updateMutation.mutateAsync({ ...newTodo, completed: true })
+}
+```
+
+## Mutation Retry
+
+Mutations do not retry by default, but you can enable it:
+
+```tsx
+useMutation({
+  mutationFn: createTodo,
+  retry: 3, // Retry up to 3 times
+})
+
+// Conditional retry
+useMutation({
+  mutationFn: createTodo,
+  retry: (failureCount, error) => {
+    // Retry on network errors only
+    return error.message.includes('network') && failureCount < 3
+  },
+})
+```
+
+## Mutation Scopes
+
+Control when mutations can run with mutation scope:
+
+```tsx
+const mutation = useMutation({
+  mutationFn: updateTodo,
+  // This mutation will run even if other mutations are pending
+  scope: {
+    id: 'todo',
+  },
+})
+```
+
+## Persisting Mutations
+
+Mutations can be persisted to storage and resumed:
+
+```tsx
+import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client'
+import { createSyncStoragePersister } from '@tanstack/query-sync-storage-persister'
+
+const persister = createSyncStoragePersister({
+  storage: window.localStorage,
+})
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      gcTime: 1000 * 60 * 60 * 24, // 24 hours
+    },
+  },
+})
+
+function App() {
+  return (
+    <PersistQueryClientProvider
+      client={queryClient}
+      persistOptions={{ persister }}
+    >
+      {/* Your app */}
+    </PersistQueryClientProvider>
+  )
+}
+```
+
+## Global Mutation Callbacks
+
+Set up global mutation callbacks in the QueryClient:
+
+```tsx
+const queryClient = new QueryClient({
+  mutationCache: new MutationCache({
+    onSuccess: (data, variables, context, mutation) => {
+      console.log('Mutation succeeded:', mutation.options.mutationKey)
+    },
+    onError: (error, variables, context, mutation) => {
+      console.error('Mutation failed:', error)
+      // Show toast notification
+    },
+  }),
+})
+```
+
+## Mutation Keys
+
+Optionally identify mutations with keys:
+
+```tsx
+const mutation = useMutation({
+  mutationKey: ['createTodo'],
+  mutationFn: createTodo,
+})
+```
+
+Use mutation keys to:
+- Access mutation state with `useMutationState`
+- Filter mutations in global callbacks
+- Cancel specific mutations
+
+## Accessing Mutation State
+
+Access the state of mutations from anywhere:
+
+```tsx
+import { useMutationState } from '@tanstack/react-query'
+
+function PendingMutations() {
+  const pendingMutations = useMutationState({
+    filters: { status: 'pending' },
+    select: (mutation) => mutation.state.variables,
+  })
+
+  return (
+    <div>
+      {pendingMutations.length} mutations pending
+    </div>
+  )
+}
+```
+
+## Error Handling
+
+<Tabs>
+  <Tab title="Per Mutation">
+    ```tsx
+    useMutation({
+      mutationFn: createTodo,
+      throwOnError: true, // Throw errors to error boundary
+    })
+    ```
+  </Tab>
+  <Tab title="Global Default">
+    ```tsx
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        mutations: {
+          throwOnError: true,
+        },
+      },
+    })
+    ```
+  </Tab>
+  <Tab title="Inline Callbacks">
+    ```tsx
+    mutation.mutate(
+      { title: 'New Todo' },
+      {
+        onSuccess: (data) => console.log(data),
+        onError: (error) => console.error(error),
+      }
+    )
+    ```
+  </Tab>
+</Tabs>
+
+## Mutation Meta
+
+Attach metadata to mutations:
+
+```tsx
+useMutation({
+  mutationFn: createTodo,
+  meta: {
+    operation: 'create',
+  },
+})
+```
+
+Access meta in callbacks:
+
+```tsx
+const queryClient = new QueryClient({
+  mutationCache: new MutationCache({
+    onSuccess: (data, variables, context, mutation) => {
+      console.log(mutation.meta?.operation)
+    },
+  }),
+})
+```

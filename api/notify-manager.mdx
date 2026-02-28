@@ -1,0 +1,281 @@
+---
+title: notifyManager
+description: API reference for the notifyManager singleton
+---
+
+The `notifyManager` is a singleton that manages notification scheduling and batching for TanStack Query. It provides utilities to batch multiple state updates together and control how notifications are executed.
+
+## Import
+
+```typescript
+import { notifyManager } from '@tanstack/query-core'
+```
+
+## Methods
+
+### batch
+
+Execute a callback and batch all notifications triggered during its execution into a single tick.
+
+```typescript
+batch<T>(callback: () => T): T
+```
+
+<ParamField path="callback" type="() => T" required>
+  A function to execute. All notifications triggered during this function's execution will be batched and flushed together.
+</ParamField>
+
+<ResponseField name="return" type="T">
+  Returns the result of the callback function.
+</ResponseField>
+
+#### Example
+
+```typescript
+import { notifyManager } from '@tanstack/query-core'
+
+notifyManager.batch(() => {
+  // Multiple state updates here will be batched
+  queryClient.setQueryData('key1', data1)
+  queryClient.setQueryData('key2', data2)
+  queryClient.setQueryData('key3', data3)
+  // All subscribers will be notified in a single batch
+})
+```
+
+<Note>
+  This is useful for performance optimization when you need to make multiple updates at once. Instead of triggering re-renders for each update, they will all be batched together.
+</Note>
+
+### batchCalls
+
+Wrap a function so that all calls to it are automatically batched.
+
+```typescript
+batchCalls<T extends Array<unknown>>(
+  callback: (...args: T) => void
+): (...args: T) => void
+```
+
+<ParamField path="callback" type="(...args: T) => void" required>
+  The function to wrap. All calls to the returned function will be batched and executed together.
+</ParamField>
+
+<ResponseField name="return" type="(...args: T) => void">
+  Returns a wrapped version of the callback that batches all calls.
+</ResponseField>
+
+#### Example
+
+```typescript
+import { notifyManager } from '@tanstack/query-core'
+
+const updateData = notifyManager.batchCalls((id: string, data: unknown) => {
+  queryClient.setQueryData(id, data)
+})
+
+// These calls will be batched together
+updateData('key1', data1)
+updateData('key2', data2)
+updateData('key3', data3)
+```
+
+### schedule
+
+Schedule a callback to be executed. If called within a batch, the callback will be queued and executed when the batch completes.
+
+```typescript
+schedule(callback: () => void): void
+```
+
+<ParamField path="callback" type="() => void" required>
+  The callback function to schedule.
+</ParamField>
+
+#### Example
+
+```typescript
+import { notifyManager } from '@tanstack/query-core'
+
+notifyManager.schedule(() => {
+  console.log('This will be executed in the next tick')
+})
+```
+
+### setNotifyFunction
+
+Set a custom function to wrap all notifications. This is useful for testing or integrating with framework-specific batching mechanisms.
+
+```typescript
+setNotifyFunction(fn: (callback: () => void) => void): void
+```
+
+<ParamField path="fn" type="(callback: () => void) => void" required>
+  A function that will be called to execute each notification. It receives a callback that should be invoked to execute the actual notification.
+</ParamField>
+
+<Note>
+  This is commonly used to wrap notifications with `React.act` during testing or to integrate with React's batching mechanism.
+</Note>
+
+#### Example
+
+```typescript
+import { notifyManager } from '@tanstack/query-core'
+import { act } from '@testing-library/react'
+
+// Wrap notifications with React.act for testing
+notifyManager.setNotifyFunction((callback) => {
+  act(callback)
+})
+```
+
+### setBatchNotifyFunction
+
+Set a custom function to batch multiple notifications together. By default, TanStack Query uses the batch function provided by ReactDOM or React Native.
+
+```typescript
+setBatchNotifyFunction(fn: (callback: () => void) => void): void
+```
+
+<ParamField path="fn" type="(callback: () => void) => void" required>
+  A function that receives a callback containing multiple batched notifications. This function should execute the callback in a way that batches the updates together.
+</ParamField>
+
+#### Example
+
+```typescript
+import { notifyManager } from '@tanstack/query-core'
+import { unstable_batchedUpdates } from 'react-dom'
+
+// Use React's batching mechanism
+notifyManager.setBatchNotifyFunction(unstable_batchedUpdates)
+```
+
+### setScheduler
+
+Set a custom scheduler function for executing notifications.
+
+```typescript
+setScheduler(fn: (callback: () => void) => void): void
+```
+
+<ParamField path="fn" type="(callback: () => void) => void" required>
+  A function that schedules the callback to be executed. By default, this uses a zero-delay timeout (`setTimeout` with 0ms delay).
+</ParamField>
+
+#### Example
+
+```typescript
+import { notifyManager } from '@tanstack/query-core'
+
+// Use requestAnimationFrame for scheduling
+notifyManager.setScheduler((callback) => {
+  requestAnimationFrame(callback)
+})
+
+// Or use queueMicrotask for synchronous scheduling
+notifyManager.setScheduler((callback) => {
+  queueMicrotask(callback)
+})
+```
+
+## Use Cases
+
+### Testing with React
+
+When testing React components, you should wrap notifications with `React.act` to ensure proper batching:
+
+```typescript
+import { notifyManager } from '@tanstack/query-core'
+import { act } from '@testing-library/react'
+
+beforeEach(() => {
+  notifyManager.setNotifyFunction((callback) => {
+    act(callback)
+  })
+})
+
+afterEach(() => {
+  // Reset to default
+  notifyManager.setNotifyFunction((callback) => {
+    callback()
+  })
+})
+```
+
+### Custom Batching Strategy
+
+You can implement a custom batching strategy to control when updates are flushed:
+
+```typescript
+import { notifyManager } from '@tanstack/query-core'
+
+let pendingUpdates: Array<() => void> = []
+let rafId: number | null = null
+
+notifyManager.setBatchNotifyFunction((callback) => {
+  pendingUpdates.push(callback)
+  
+  if (rafId === null) {
+    rafId = requestAnimationFrame(() => {
+      const updates = pendingUpdates
+      pendingUpdates = []
+      rafId = null
+      
+      updates.forEach(update => update())
+    })
+  }
+})
+```
+
+### Optimizing Performance
+
+Use `batch` to group multiple updates and prevent unnecessary re-renders:
+
+```typescript
+import { notifyManager, useQueryClient } from '@tanstack/react-query'
+
+function updateMultipleQueries() {
+  const queryClient = useQueryClient()
+  
+  // Without batching: 3 separate re-renders
+  queryClient.setQueryData('user', userData)
+  queryClient.setQueryData('posts', postsData)
+  queryClient.setQueryData('comments', commentsData)
+  
+  // With batching: 1 re-render
+  notifyManager.batch(() => {
+    queryClient.setQueryData('user', userData)
+    queryClient.setQueryData('posts', postsData)
+    queryClient.setQueryData('comments', commentsData)
+  })
+}
+```
+
+### Synchronous Scheduling
+
+In some cases, you may want notifications to execute synchronously:
+
+```typescript
+import { notifyManager } from '@tanstack/query-core'
+
+// Execute notifications synchronously
+notifyManager.setScheduler((callback) => {
+  callback()
+})
+```
+
+<Note>
+  Be cautious with synchronous scheduling as it can lead to performance issues if many notifications are triggered in quick succession.
+</Note>
+
+## Default Behavior
+
+By default, the `notifyManager`:
+
+- Uses a zero-delay timeout (`setTimeout(callback, 0)`) for scheduling notifications
+- Executes notifications immediately (no wrapping)
+- Executes batch notifications immediately (no framework-specific batching)
+
+These defaults work well for most use cases, but you can customize them based on your framework and testing requirements.

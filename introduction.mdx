@@ -1,0 +1,122 @@
+---
+title: TanStack Query
+description: Powerful asynchronous state management for TypeScript/JavaScript applications
+---
+
+# TanStack Query
+
+TanStack Query is a powerful async state management library that simplifies fetching, caching, synchronizing, and updating server state in your applications.
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/installation">
+    Get started by installing TanStack Query in your project
+  </Card>
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Build your first query in minutes with a complete example
+  </Card>
+  <Card title="Essential Concepts" icon="book" href="/essentials/overview">
+    Learn the core concepts and patterns of TanStack Query
+  </Card>
+  <Card title="TypeScript" icon="code" href="/essentials/typescript">
+    Full TypeScript support with type inference and safety
+  </Card>
+</CardGroup>
+
+## Why TanStack Query?
+
+TanStack Query eliminates the complexity of managing server state in your application. It provides a simple, declarative API for data fetching while handling all the complex logic behind the scenes.
+
+### Key Features
+
+<CardGroup cols={2}>
+  <Card title="Smart Caching" icon="database">
+    Automatic caching with configurable stale times and garbage collection. Your data is cached intelligently to minimize network requests.
+  </Card>
+  <Card title="Background Updates" icon="rotate">
+    Automatic background refetching keeps your data fresh. Queries update on window focus, network reconnection, and configurable intervals.
+  </Card>
+  <Card title="Request Deduplication" icon="layer-group">
+    Multiple components requesting the same data trigger only one network request. Results are shared automatically.
+  </Card>
+  <Card title="Optimistic Updates" icon="bolt">
+    Update your UI optimistically before server confirmation. Roll back automatically on error for a seamless user experience.
+  </Card>
+  <Card title="Infinite Scrolling" icon="arrow-down">
+    Built-in support for infinite queries and pagination. Load more data seamlessly as users scroll.
+  </Card>
+  <Card title="DevTools" icon="wrench">
+    Powerful devtools for inspecting queries, mutations, and cache state in real-time during development.
+  </Card>
+</CardGroup>
+
+## Framework Support
+
+TanStack Query works seamlessly across multiple frameworks:
+
+- **React Query** - The most popular data-fetching library for React
+- **Vue Query** - First-class support for Vue 3
+- **Svelte Query** - Native integration with Svelte
+- **Solid Query** - Built for SolidJS applications
+- **Angular Query** - Experimental support for Angular
+
+<Note>
+  All framework adapters share the same core API, making it easy to transfer knowledge between projects.
+</Note>
+
+## Protocol Agnostic
+
+TanStack Query doesn't care how you fetch your data. Use it with:
+
+- REST APIs
+- GraphQL
+- gRPC
+- WebSockets
+- Any async function that returns a Promise
+
+## Production Ready
+
+Trusted by thousands of applications in production:
+
+- **Lightweight** - Small bundle size with tree-shaking support
+- **Type-safe** - Full TypeScript support with excellent type inference
+- **Battle-tested** - Used by major companies and open source projects
+- **Well-documented** - Comprehensive guides and API documentation
+- **Active development** - Regular updates and improvements from the community
+
+<Tip>
+  TanStack Query is part of the larger TanStack ecosystem, which includes libraries for routing, tables, forms, and more.
+</Tip>
+
+## Get Started
+
+<Steps>
+  <Step title="Install TanStack Query">
+    Add the package to your project using your preferred package manager.
+    
+    [View installation guide →](/installation)
+  </Step>
+  
+  <Step title="Set up QueryClient">
+    Configure the QueryClient and wrap your app with QueryClientProvider.
+    
+    [See quick start →](/quickstart)
+  </Step>
+  
+  <Step title="Build your first query">
+    Use the `useQuery` hook to fetch and cache data with automatic background updates.
+    
+    [Learn essential concepts →](/essentials/overview)
+  </Step>
+</Steps>
+
+## Community and Support
+
+Join thousands of developers using TanStack Query:
+
+- [GitHub Discussions](https://github.com/TanStack/query/discussions) - Ask questions and share ideas
+- [Discord](https://discord.com/invite/WrRKjPJ) - Chat with the community
+- [GitHub Issues](https://github.com/TanStack/query/issues) - Report bugs and request features
+
+<Warning>
+  Upgrading from an older version? Check the migration guides for breaking changes and new features.
+</Warning>

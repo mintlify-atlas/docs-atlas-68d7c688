@@ -1,0 +1,445 @@
+---
+title: Background Fetching Indicators
+description: Display loading states and progress indicators for background refetches and data updates
+---
+
+TanStack Query distinguishes between initial loading states and background refetching states, allowing you to provide appropriate feedback to users at each stage of data fetching.
+
+## Understanding Fetch States
+
+Every query has two important state properties:
+
+- `status` - Reflects the data state: `pending`, `error`, or `success`
+- `fetchStatus` - Reflects the fetch state: `fetching`, `paused`, or `idle`
+
+```tsx
+import { useQuery } from '@tanstack/react-query'
+
+function Example() {
+  const { status, fetchStatus, data } = useQuery({
+    queryKey: ['posts'],
+    queryFn: fetchPosts,
+  })
+  
+  // status: 'pending' | 'error' | 'success'
+  // fetchStatus: 'fetching' | 'paused' | 'idle'
+}
+```
+
+<Note>
+A query can be in `success` status while `fetchStatus` is `fetching` - this means you have data from a previous fetch, but a background refetch is in progress.
+</Note>
+
+## Primary Loading States
+
+### isPending
+
+True when the query has no data yet:
+
+```tsx
+function Posts() {
+  const { isPending, data, error } = useQuery({
+    queryKey: ['posts'],
+    queryFn: fetchPosts,
+  })
+  
+  if (isPending) {
+    return <div>Loading...</div>
+  }
+  
+  if (error) {
+    return <div>Error: {error.message}</div>
+  }
+  
+  return (
+    <ul>
+      {data.map(post => <li key={post.id}>{post.title}</li>)}
+    </ul>
+  )
+}
+```
+
+### isLoading
+
+True when the query is pending AND fetching:
+
+```tsx
+function Posts() {
+  const { isLoading, data } = useQuery({
+    queryKey: ['posts'],
+    queryFn: fetchPosts,
+  })
+  
+  // isLoading = isPending && isFetching
+  if (isLoading) {
+    return <Spinner />
+  }
+  
+  return <PostList posts={data} />
+}
+```
+
+## Background Fetching Indicators
+
+### isFetching
+
+True whenever a fetch is in progress (initial or background):
+
+```tsx
+function Posts() {
+  const { data, error, isFetching } = useQuery({
+    queryKey: ['posts'],
+    queryFn: fetchPosts,
+  })
+  
+  return (
+    <div>
+      <h1>Posts</h1>
+      {data && (
+        <>
+          <PostList posts={data} />
+          {isFetching && (
+            <div style={{ color: 'green' }}>
+              Updating in background...
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+```
+
+### Real-World Example
+
+Complete example showing all states:
+
+```tsx
+import { useQuery } from '@tanstack/react-query'
+
+function GitHubRepo() {
+  const { isPending, error, data, isFetching } = useQuery({
+    queryKey: ['repoData'],
+    queryFn: async () => {
+      const response = await fetch(
+        'https://api.github.com/repos/TanStack/query'
+      )
+      return await response.json()
+    },
+  })
+
+  if (isPending) return 'Loading...'
+
+  if (error) return 'An error has occurred: ' + error.message
+
+  return (
+    <div>
+      <h1>{data.full_name}</h1>
+      <p>{data.description}</p>
+      <strong>👀 {data.subscribers_count}</strong>{' '}
+      <strong>✨ {data.stargazers_count}</strong>{' '}
+      <strong>🍴 {data.forks_count}</strong>
+      <div>{isFetching ? 'Updating...' : ''}</div>
+    </div>
+  )
+}
+```
+
+## Global Fetching Indicators
+
+Show a global indicator when any query is fetching:
+
+```tsx
+import { useIsFetching } from '@tanstack/react-query'
+
+function GlobalLoadingIndicator() {
+  const isFetching = useIsFetching()
+  
+  return isFetching ? (
+    <div className="global-loading-bar">
+      Loading...
+    </div>
+  ) : null
+}
+
+function App() {
+  return (
+    <>
+      <GlobalLoadingIndicator />
+      <YourApp />
+    </>
+  )
+}
+```
+
+### Filtered Global Indicators
+
+Show indicators for specific query types:
+
+```tsx
+import { useIsFetching } from '@tanstack/react-query'
+
+function PostsLoadingIndicator() {
+  // Only count fetching for post-related queries
+  const isFetchingPosts = useIsFetching({ queryKey: ['posts'] })
+  
+  return isFetchingPosts > 0 ? (
+    <div>Fetching {isFetchingPosts} post queries...</div>
+  ) : null
+}
+```
+
+<Tip>
+`useIsFetching` returns the number of queries currently fetching, not just a boolean.
+</Tip>
+
+## Visual Feedback Patterns
+
+### Inline Background Indicator
+
+```tsx
+function Posts() {
+  const { data, isFetching } = useQuery({
+    queryKey: ['posts'],
+    queryFn: fetchPosts,
+  })
+  
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+        <h1>Posts</h1>
+        {isFetching && (
+          <div
+            style={{
+              width: 10,
+              height: 10,
+              background: 'green',
+              borderRadius: '100%',
+              animation: 'pulse 1s infinite',
+            }}
+          />
+        )}
+      </div>
+      <PostList posts={data} />
+    </div>
+  )
+}
+```
+
+### Progress Bar
+
+```tsx
+function ProgressBar({ show }) {
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        height: 3,
+        background: 'linear-gradient(90deg, #3b82f6, #8b5cf6)',
+        transform: show ? 'scaleX(1)' : 'scaleX(0)',
+        transformOrigin: 'left',
+        transition: show ? 'transform 0.3s ease' : 'transform 0.3s ease 0.2s',
+      }}
+    />
+  )
+}
+
+function App() {
+  const isFetching = useIsFetching()
+  
+  return (
+    <>
+      <ProgressBar show={isFetching > 0} />
+      <YourApp />
+    </>
+  )
+}
+```
+
+### Refresh Indicator with Auto Refetch
+
+```tsx
+import React from 'react'
+import { useQuery } from '@tanstack/react-query'
+
+function AutoRefetchExample() {
+  const [intervalMs, setIntervalMs] = React.useState(1000)
+  
+  const { data, isFetching } = useQuery({
+    queryKey: ['todos'],
+    queryFn: async () => {
+      const response = await fetch('/api/data')
+      return await response.json()
+    },
+    refetchInterval: intervalMs,
+  })
+  
+  return (
+    <div>
+      <label>
+        Refetch Interval (ms):{' '}
+        <input
+          type="number"
+          value={intervalMs}
+          onChange={(e) => setIntervalMs(Number(e.target.value))}
+          step="100"
+        />
+        {' '}
+        <span
+          style={{
+            display: 'inline-block',
+            width: 10,
+            height: 10,
+            background: isFetching ? 'green' : 'transparent',
+            transition: !isFetching ? 'all .3s ease' : 'none',
+            borderRadius: '100%',
+            transform: 'scale(2)',
+          }}
+        />
+      </label>
+      
+      <ul>
+        {data?.map((item) => (
+          <li key={item}>{item}</li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+```
+
+## Mutation Loading States
+
+Show loading states for mutations:
+
+```tsx
+import { useMutation } from '@tanstack/react-query'
+
+function CreatePost() {
+  const mutation = useMutation({
+    mutationFn: async (newPost) => {
+      const response = await fetch('/api/posts', {
+        method: 'POST',
+        body: JSON.stringify(newPost),
+        headers: { 'Content-Type': 'application/json' },
+      })
+      return await response.json()
+    },
+  })
+  
+  return (
+    <button
+      onClick={() => mutation.mutate({ title: 'New Post' })}
+      disabled={mutation.isPending}
+    >
+      {mutation.isPending ? 'Creating...' : 'Create Post'}
+    </button>
+  )
+}
+```
+
+### Global Mutation Indicator
+
+```tsx
+import { useIsMutating } from '@tanstack/react-query'
+
+function GlobalMutatingIndicator() {
+  const isMutating = useIsMutating()
+  
+  return isMutating ? (
+    <div className="saving-indicator">
+      Saving changes...
+    </div>
+  ) : null
+}
+```
+
+## Combining States
+
+### Complete Loading UX
+
+```tsx
+function Posts({ setPostId }) {
+  const queryClient = useQueryClient()
+  const { status, data, error, isFetching } = useQuery({
+    queryKey: ['posts'],
+    queryFn: fetchPosts,
+  })
+  
+  return (
+    <div>
+      <h1>Posts</h1>
+      
+      {status === 'pending' ? (
+        <div className="loading-skeleton">
+          <Spinner /> Loading posts...
+        </div>
+      ) : status === 'error' ? (
+        <div className="error-message">
+          <span>Error: {error.message}</span>
+        </div>
+      ) : (
+        <>
+          <div>
+            {data.map((post) => (
+              <div key={post.id}>
+                <a
+                  onClick={() => setPostId(post.id)}
+                  href="#"
+                  style={{
+                    fontWeight: queryClient.getQueryData(['post', post.id])
+                      ? 'bold'
+                      : 'normal',
+                    color: queryClient.getQueryData(['post', post.id])
+                      ? 'green'
+                      : 'black',
+                  }}
+                >
+                  {post.title}
+                </a>
+              </div>
+            ))}
+          </div>
+          
+          {isFetching && (
+            <div className="background-update">
+              Background Updating...
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+```
+
+## Best Practices
+
+<Steps>
+  <Step title="Use isPending for initial loads">
+    Show full loading states (spinners, skeletons) when `isPending` is true.
+  </Step>
+  
+  <Step title="Use isFetching for background updates">
+    Show subtle indicators (small spinners, progress bars) when `isFetching` is true but data exists.
+  </Step>
+  
+  <Step title="Provide context-appropriate feedback">
+    Global indicators for app-wide fetching, inline indicators for component-specific updates.
+  </Step>
+  
+  <Step title="Don't over-indicate">
+    Too many loading indicators can be distracting. Choose the most important ones to display.
+  </Step>
+  
+  <Step title="Make indicators non-intrusive">
+    Background refetch indicators should be subtle and not interrupt the user experience.
+  </Step>
+</Steps>
+
+<Warning>
+Avoid blocking the UI during background refetches. Users should be able to interact with cached data while fresh data loads.
+</Warning>

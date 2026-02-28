@@ -1,0 +1,322 @@
+---
+title: QueriesObserver
+description: The QueriesObserver manages multiple queries simultaneously.
+---
+
+## Overview
+
+The `QueriesObserver` allows you to observe multiple queries at once and optionally combine their results. It's the foundation for framework-specific hooks like `useQueries` in React.
+
+## Constructor
+
+```typescript
+const observer = new QueriesObserver<TCombinedResult>(
+  client: QueryClient,
+  queries: Array<QueryObserverOptions>,
+  options?: QueriesObserverOptions<TCombinedResult>
+)
+```
+
+<ParamField path="client" type="QueryClient" required>
+  The QueryClient instance
+</ParamField>
+
+<ParamField path="queries" type="Array<QueryObserverOptions>" required>
+  Array of query options
+</ParamField>
+
+<ParamField path="options" type="QueriesObserverOptions<TCombinedResult>" optional>
+  <Expandable title="properties">
+    <ParamField path="combine" type="(results: Array<QueryObserverResult>) => TCombinedResult" optional>
+      Function to combine results from all queries into a single value
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+**Example:**
+
+```typescript
+const observer = new QueriesObserver(queryClient, [
+  {
+    queryKey: ['todos'],
+    queryFn: fetchTodos,
+  },
+  {
+    queryKey: ['users'],
+    queryFn: fetchUsers,
+  },
+])
+```
+
+## Methods
+
+### subscribe()
+
+Subscribes to updates from all queries.
+
+```typescript
+const unsubscribe = observer.subscribe(
+  listener: (results: Array<QueryObserverResult>) => void
+): () => void
+```
+
+<ParamField path="listener" type="(results: Array<QueryObserverResult>) => void" required>
+  Callback function that receives an array of query results
+</ParamField>
+
+**Returns:** Function to unsubscribe
+
+**Example:**
+
+```typescript
+const unsubscribe = observer.subscribe((results) => {
+  const [todosResult, usersResult] = results
+  
+  console.log('Todos:', todosResult.data)
+  console.log('Users:', usersResult.data)
+  
+  // Check if all queries are loaded
+  const allLoaded = results.every(result => result.isSuccess)
+  console.log('All loaded:', allLoaded)
+})
+
+// Later, unsubscribe
+unsubscribe()
+```
+
+### getCurrentResult()
+
+Returns the current results from all queries without subscribing.
+
+```typescript
+const results = observer.getCurrentResult(): Array<QueryObserverResult>
+```
+
+**Returns:** Array of current query results
+
+**Example:**
+
+```typescript
+const results = observer.getCurrentResult()
+const isAnyLoading = results.some(result => result.isLoading)
+const allSuccess = results.every(result => result.isSuccess)
+```
+
+### setQueries()
+
+Updates the queries being observed.
+
+```typescript
+observer.setQueries(
+  queries: Array<QueryObserverOptions>,
+  options?: QueriesObserverOptions<TCombinedResult>
+): void
+```
+
+<ParamField path="queries" type="Array<QueryObserverOptions>" required>
+  New array of query options
+</ParamField>
+
+<ParamField path="options" type="QueriesObserverOptions<TCombinedResult>" optional>
+  New observer options
+</ParamField>
+
+**Example:**
+
+```typescript
+observer.setQueries([
+  {
+    queryKey: ['todos'],
+    queryFn: fetchTodos,
+    staleTime: 10000, // Updated option
+  },
+  {
+    queryKey: ['users'],
+    queryFn: fetchUsers,
+  },
+  {
+    queryKey: ['posts'], // New query added
+    queryFn: fetchPosts,
+  },
+])
+```
+
+### getQueries()
+
+Returns the underlying Query instances.
+
+```typescript
+const queries = observer.getQueries(): Array<Query>
+```
+
+**Returns:** Array of Query instances
+
+### getObservers()
+
+Returns the underlying QueryObserver instances.
+
+```typescript
+const observers = observer.getObservers(): Array<QueryObserver>
+```
+
+**Returns:** Array of QueryObserver instances
+
+### getOptimisticResult()
+
+Returns optimistic results and a combine function.
+
+```typescript
+const [rawResults, combineResults, trackResults] = observer.getOptimisticResult(
+  queries: Array<QueryObserverOptions>,
+  combine?: (results: Array<QueryObserverResult>) => TCombinedResult
+): [
+  rawResult: Array<QueryObserverResult>,
+  combineResult: (r?: Array<QueryObserverResult>) => TCombinedResult,
+  trackResult: () => Array<QueryObserverResult>
+]
+```
+
+**Returns:** Tuple of `[rawResults, combineFunction, trackFunction]`
+
+### destroy()
+
+Destroys the observer and cleans up all query observers.
+
+```typescript
+observer.destroy(): void
+```
+
+**Example:**
+
+```typescript
+observer.destroy()
+```
+
+## Combining Results
+
+You can provide a `combine` function to transform the array of results into any shape:
+
+```typescript
+const observer = new QueriesObserver(
+  queryClient,
+  [
+    { queryKey: ['todos'], queryFn: fetchTodos },
+    { queryKey: ['users'], queryFn: fetchUsers },
+  ],
+  {
+    combine: (results) => {
+      return {
+        data: {
+          todos: results[0].data,
+          users: results[1].data,
+        },
+        isLoading: results.some(r => r.isLoading),
+        isError: results.some(r => r.isError),
+      }
+    },
+  }
+)
+```
+
+## Type Parameters
+
+- `TCombinedResult` - The type of the combined result (defaults to `Array<QueryObserverResult>`)
+
+## Usage Example
+
+```typescript
+import { QueryClient, QueriesObserver } from '@tanstack/query-core'
+
+const queryClient = new QueryClient()
+
+const observer = new QueriesObserver(
+  queryClient,
+  [
+    {
+      queryKey: ['todos'],
+      queryFn: async () => {
+        const response = await fetch('/api/todos')
+        return response.json()
+      },
+    },
+    {
+      queryKey: ['users'],
+      queryFn: async () => {
+        const response = await fetch('/api/users')
+        return response.json()
+      },
+    },
+  ],
+  {
+    combine: (results) => ({
+      todos: results[0].data,
+      users: results[1].data,
+      isPending: results.some(r => r.isPending),
+    }),
+  }
+)
+
+// Subscribe to updates
+const unsubscribe = observer.subscribe((results) => {
+  const [todosResult, usersResult] = results
+  
+  if (todosResult.isSuccess && usersResult.isSuccess) {
+    console.log('Todos:', todosResult.data)
+    console.log('Users:', usersResult.data)
+  }
+})
+
+// Later, clean up
+unsubscribe()
+observer.destroy()
+```
+
+## Dynamic Queries
+
+You can dynamically add or remove queries:
+
+```typescript
+const observer = new QueriesObserver(queryClient, [])
+
+// Start with no queries
+let queries = []
+
+// Add a query
+queries.push({
+  queryKey: ['todos'],
+  queryFn: fetchTodos,
+})
+observer.setQueries(queries)
+
+// Add another query
+queries.push({
+  queryKey: ['users'],
+  queryFn: fetchUsers,
+})
+observer.setQueries(queries)
+
+// Remove a query
+queries = queries.filter(q => q.queryKey[0] !== 'todos')
+observer.setQueries(queries)
+```
+
+## Result Array Structure
+
+The results array maintains the same order as the queries array:
+
+```typescript
+const observer = new QueriesObserver(queryClient, [
+  { queryKey: ['todos'], queryFn: fetchTodos },    // results[0]
+  { queryKey: ['users'], queryFn: fetchUsers },    // results[1]
+  { queryKey: ['posts'], queryFn: fetchPosts },    // results[2]
+])
+
+const results = observer.getCurrentResult()
+const todosData = results[0].data
+const usersData = results[1].data
+const postsData = results[2].data
+```
+
+<Note>
+  When using the `combine` option, the combined result is memoized and only recomputed when the individual query results change.
+</Note>

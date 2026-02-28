@@ -1,0 +1,592 @@
+---
+title: TypeScript with Solid Query
+description: Leverage full type safety with TanStack Solid Query and TypeScript
+---
+
+# TypeScript with Solid Query
+
+Solid Query is written in TypeScript and provides comprehensive type safety out of the box. This guide covers how to get the most out of TypeScript with Solid Query.
+
+## Type Inference
+
+Solid Query automatically infers types from your query and mutation functions:
+
+```tsx
+import { useQuery } from '@tanstack/solid-query'
+
+interface Todo {
+  id: number
+  title: string
+  completed: boolean
+}
+
+function TodoList() {
+  // TypeScript infers data type as Todo[] | undefined
+  const todosQuery = useQuery(() => ({
+    queryKey: ['todos'],
+    queryFn: async (): Promise<Todo[]> => {
+      const response = await fetch('/api/todos')
+      return response.json()
+    },
+  }))
+
+  // todosQuery.data is typed as Todo[] | undefined
+  // todosQuery.error is typed as Error | null
+  return <div>{todosQuery.data?.length} todos</div>
+}
+```
+
+## Generic Type Parameters
+
+You can explicitly specify type parameters for more control:
+
+```tsx
+import { useQuery } from '@tanstack/solid-query'
+import type { UseQueryResult } from '@tanstack/solid-query'
+
+interface User {
+  id: string
+  name: string
+  email: string
+}
+
+interface ApiError {
+  message: string
+  code: number
+}
+
+function UserProfile(props: { userId: string }) {
+  // Specify TQueryFnData, TError, TData, TQueryKey
+  const userQuery = useQuery<User, ApiError, User, ['user', string]>(() => ({
+    queryKey: ['user', props.userId],
+    queryFn: async () => {
+      const response = await fetch(`/api/users/${props.userId}`)
+      if (!response.ok) {
+        throw { message: 'User not found', code: 404 }
+      }
+      return response.json()
+    },
+  }))
+
+  // userQuery.data is typed as User | undefined
+  // userQuery.error is typed as ApiError | null
+  return (
+    <Show when={userQuery.data}>
+      {(user) => <div>{user().name}</div>}
+    </Show>
+  )
+}
+```
+
+### Type Parameters Explained
+
+```tsx
+useQuery<TQueryFnData, TError, TData, TQueryKey>()
+```
+
+- **TQueryFnData**: The type returned by the queryFn
+- **TError**: The type of errors that can be thrown (defaults to `Error`)
+- **TData**: The type of data in the query result (useful with `select`)
+- **TQueryKey**: The type of the query key (for type-safe query keys)
+
+## Query Options Type Safety
+
+Use the `queryOptions` helper for type-safe, reusable query configurations:
+
+```tsx
+import { queryOptions, useQuery } from '@tanstack/solid-query'
+
+interface Post {
+  id: number
+  title: string
+  body: string
+  userId: number
+}
+
+interface User {
+  id: number
+  name: string
+  email: string
+}
+
+// Define reusable query options
+const postQueries = {
+  all: () => queryOptions({
+    queryKey: ['posts'],
+    queryFn: async (): Promise<Post[]> => {
+      const response = await fetch('/api/posts')
+      return response.json()
+    },
+  }),
+  detail: (id: number) => queryOptions({
+    queryKey: ['posts', id] as const,
+    queryFn: async (): Promise<Post> => {
+      const response = await fetch(`/api/posts/${id}`)
+      return response.json()
+    },
+  }),
+  byUser: (userId: number) => queryOptions({
+    queryKey: ['posts', 'user', userId] as const,
+    queryFn: async (): Promise<Post[]> => {
+      const response = await fetch(`/api/posts?userId=${userId}`)
+      return response.json()
+    },
+  }),
+}
+
+// Use with full type inference
+function PostDetail(props: { id: number }) {
+  // Types are automatically inferred from queryOptions
+  const postQuery = useQuery(() => postQueries.detail(props.id))
+  
+  return (
+    <Show when={postQuery.data}>
+      {(post) => (
+        <article>
+          <h1>{post().title}</h1>
+          <p>{post().body}</p>
+        </article>
+      )}
+    </Show>
+  )
+}
+```
+
+<Tip>
+Use `as const` on query keys to preserve literal types for better type inference.
+</Tip>
+
+## Mutation Type Safety
+
+Mutations also support full type inference:
+
+```tsx
+import { useMutation, useQueryClient } from '@tanstack/solid-query'
+import type { UseMutationResult } from '@tanstack/solid-query'
+
+interface CreateTodoInput {
+  title: string
+  description?: string
+}
+
+interface Todo {
+  id: number
+  title: string
+  description: string
+  completed: boolean
+}
+
+interface ApiError {
+  message: string
+  field?: string
+}
+
+function CreateTodo() {
+  const queryClient = useQueryClient()
+  
+  // Type parameters: TData, TError, TVariables, TOnMutateResult
+  const mutation = useMutation<Todo, ApiError, CreateTodoInput, { previousTodos?: Todo[] }>()
+    (() => ({
+      mutationFn: async (input: CreateTodoInput): Promise<Todo> => {
+        const response = await fetch('/api/todos', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(input),
+        })
+        if (!response.ok) {
+          const error: ApiError = await response.json()
+          throw error
+        }
+        return response.json()
+      },
+      onMutate: async (newTodo) => {
+        await queryClient.cancelQueries({ queryKey: ['todos'] })
+        const previousTodos = queryClient.getQueryData<Todo[]>(['todos'])
+        return { previousTodos }
+      },
+      onError: (err, newTodo, context) => {
+        // err is typed as ApiError
+        // context is typed as { previousTodos?: Todo[] }
+        if (context?.previousTodos) {
+          queryClient.setQueryData(['todos'], context.previousTodos)
+        }
+      },
+      onSuccess: (data) => {
+        // data is typed as Todo
+        queryClient.invalidateQueries({ queryKey: ['todos'] })
+      },
+    }))
+
+  return (
+    <button 
+      onClick={() => mutation.mutate({ title: 'New Todo' })}
+      disabled={mutation.isPending}
+    >
+      Create Todo
+    </button>
+  )
+}
+```
+
+## Infinite Query Types
+
+Type-safe infinite queries with proper page param typing:
+
+```tsx
+import { useInfiniteQuery } from '@tanstack/solid-query'
+import type { InfiniteData } from '@tanstack/solid-query'
+
+interface Post {
+  id: number
+  title: string
+}
+
+interface PostsPage {
+  posts: Post[]
+  nextCursor?: number
+  previousCursor?: number
+}
+
+function InfinitePosts() {
+  // Specify TQueryFnData, TError, TData, TQueryKey, TPageParam
+  const query = useInfiniteQuery<
+    PostsPage,
+    Error,
+    InfiniteData<PostsPage>,
+    ['posts'],
+    number
+  >(() => ({
+    queryKey: ['posts'],
+    queryFn: async ({ pageParam }): Promise<PostsPage> => {
+      const response = await fetch(`/api/posts?cursor=${pageParam}`)
+      return response.json()
+    },
+    initialPageParam: 0,
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
+    getPreviousPageParam: (firstPage) => firstPage.previousCursor,
+  }))
+
+  // query.data is typed as InfiniteData<PostsPage> | undefined
+  return (
+    <For each={query.data?.pages}>
+      {(page) => (
+        <For each={page.posts}>
+          {(post) => <div>{post.title}</div>}
+        </For>
+      )}
+    </For>
+  )
+}
+```
+
+## Custom Query Client Types
+
+Extend the QueryClient with custom configuration types:
+
+```tsx
+import { QueryClient } from '@tanstack/solid-query'
+import type { DefaultError, QueryClientConfig } from '@tanstack/solid-query'
+
+interface CustomError {
+  message: string
+  code: number
+  details?: Record<string, any>
+}
+
+const config: QueryClientConfig = {
+  defaultOptions: {
+    queries: {
+      staleTime: 5 * 60 * 1000,
+      retry: (failureCount, error) => {
+        // error is typed as DefaultError
+        const customError = error as CustomError
+        if (customError.code === 404) return false
+        return failureCount < 3
+      },
+    },
+  },
+}
+
+const queryClient = new QueryClient(config)
+```
+
+## Type-Safe Query Keys
+
+Create a type-safe query key factory:
+
+```tsx
+const queryKeys = {
+  todos: {
+    all: ['todos'] as const,
+    lists: () => [...queryKeys.todos.all, 'list'] as const,
+    list: (filters: string) => [...queryKeys.todos.lists(), filters] as const,
+    details: () => [...queryKeys.todos.all, 'detail'] as const,
+    detail: (id: number) => [...queryKeys.todos.details(), id] as const,
+  },
+  users: {
+    all: ['users'] as const,
+    detail: (id: string) => [...queryKeys.users.all, id] as const,
+  },
+} as const
+
+// Usage with full type safety
+function TodoDetail(props: { id: number }) {
+  const todoQuery = useQuery(() => ({
+    queryKey: queryKeys.todos.detail(props.id),
+    queryFn: () => fetchTodo(props.id),
+  }))
+
+  return <div>{todoQuery.data?.title}</div>
+}
+
+// Invalidation with type safety
+function RefreshButton() {
+  const queryClient = useQueryClient()
+  
+  return (
+    <button onClick={() => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.todos.all })
+    }}>
+      Refresh All Todos
+    </button>
+  )
+}
+```
+
+## Data Transformation with Select
+
+Use the `select` option to transform query data with full type safety:
+
+```tsx
+interface RawTodo {
+  id: number
+  title: string
+  completed: boolean
+  createdAt: string
+}
+
+interface TransformedTodo {
+  id: number
+  title: string
+  completed: boolean
+  createdAt: Date
+}
+
+function TodoList() {
+  const todosQuery = useQuery<RawTodo[], Error, TransformedTodo[]>(() => ({
+    queryKey: ['todos'],
+    queryFn: async (): Promise<RawTodo[]> => {
+      const response = await fetch('/api/todos')
+      return response.json()
+    },
+    select: (data): TransformedTodo[] => {
+      // data is typed as RawTodo[]
+      return data.map(todo => ({
+        ...todo,
+        createdAt: new Date(todo.createdAt),
+      }))
+      // return type must be TransformedTodo[]
+    },
+  }))
+
+  // todosQuery.data is typed as TransformedTodo[] | undefined
+  return (
+    <For each={todosQuery.data}>
+      {(todo) => (
+        <div>
+          {todo.title} - {todo.createdAt.toLocaleDateString()}
+        </div>
+      )}
+    </For>
+  )
+}
+```
+
+## Accessor Types
+
+Solid Query uses SolidJS Accessors for reactive options:
+
+```tsx
+import type { Accessor } from 'solid-js'
+import type { UseQueryOptions, UseQueryResult } from '@tanstack/solid-query'
+
+// Options must be wrapped in an Accessor
+type SolidQueryOptions<TData> = Accessor<{
+  queryKey: string[]
+  queryFn: () => Promise<TData>
+  enabled?: boolean
+  staleTime?: number
+}>
+
+function useCustomQuery<TData>(
+  options: SolidQueryOptions<TData>
+): UseQueryResult<TData, Error> {
+  return useQuery(options)
+}
+
+// Usage
+function Component(props: { userId: string }) {
+  const query = useCustomQuery(() => ({
+    queryKey: ['user', props.userId],
+    queryFn: () => fetchUser(props.userId),
+    enabled: props.userId !== '',
+  }))
+
+  return <div>{query.data?.name}</div>
+}
+```
+
+## Type Utilities
+
+Solid Query exports useful type utilities:
+
+```tsx
+import type {
+  UseQueryResult,
+  DefinedUseQueryResult,
+  UseMutationResult,
+  QueryKey,
+  DefaultError,
+  InfiniteData,
+} from '@tanstack/solid-query'
+
+// Defined query result (data is never undefined)
+type DefinedTodoQuery = DefinedUseQueryResult<Todo[], Error>
+
+// Extract types from existing query results
+type TodoData = UseQueryResult<Todo[], Error>['data']
+type TodoError = UseQueryResult<Todo[], Error>['error']
+
+// Mutation result types
+type CreateTodoMutation = UseMutationResult<Todo, Error, CreateTodoInput>
+```
+
+## Initial Data with Types
+
+```tsx
+interface Todo {
+  id: number
+  title: string
+}
+
+function TodoDetail(props: { id: number }) {
+  const queryClient = useQueryClient()
+  
+  const todoQuery = useQuery(() => ({
+    queryKey: ['todo', props.id],
+    queryFn: () => fetchTodo(props.id),
+    initialData: () => {
+      // Get typed data from cache
+      const todos = queryClient.getQueryData<Todo[]>(['todos'])
+      return todos?.find(todo => todo.id === props.id)
+    },
+    // Mark data as stale if it came from cache
+    initialDataUpdatedAt: () => {
+      return queryClient.getQueryState(['todos'])?.dataUpdatedAt
+    },
+  }))
+
+  return <div>{todoQuery.data?.title}</div>
+}
+```
+
+## Error Handling Types
+
+```tsx
+import { ErrorBoundary } from 'solid-js'
+
+interface ValidationError {
+  field: string
+  message: string
+}
+
+interface ApiError {
+  status: number
+  message: string
+  errors?: ValidationError[]
+}
+
+function CreatePost() {
+  const mutation = useMutation<Post, ApiError, CreatePostInput>(() => ({
+    mutationFn: async (input) => {
+      const response = await fetch('/api/posts', {
+        method: 'POST',
+        body: JSON.stringify(input),
+      })
+      
+      if (!response.ok) {
+        const error: ApiError = await response.json()
+        throw error
+      }
+      
+      return response.json()
+    },
+    onError: (error) => {
+      // error is fully typed as ApiError
+      console.error(`Failed with status ${error.status}`)
+      error.errors?.forEach(err => {
+        console.error(`${err.field}: ${err.message}`)
+      })
+    },
+  }))
+
+  return (
+    <ErrorBoundary
+      fallback={(error: ApiError) => (
+        <div>
+          <h3>Error {error.status}</h3>
+          <p>{error.message}</p>
+        </div>
+      )}
+    >
+      {/* Component content */}
+    </ErrorBoundary>
+  )
+}
+```
+
+## Best Practices
+
+<Note>
+Follow these TypeScript best practices with Solid Query:
+</Note>
+
+1. **Define Interfaces First**: Always define your data interfaces before using them in queries
+
+2. **Use `queryOptions`**: Leverage the `queryOptions` helper for reusable, type-safe configurations
+
+3. **Explicit Return Types**: Add explicit return types to your query and mutation functions
+
+4. **Use `as const`**: Use `as const` for query keys to preserve literal types
+
+5. **Type Guards**: Implement type guards for runtime type checking when needed
+
+6. **Generic Helpers**: Create generic helper functions for common query patterns
+
+## Version Support
+
+Solid Query is tested against TypeScript versions:
+
+- TypeScript 5.0+
+- TypeScript 5.1+
+- TypeScript 5.2+
+- TypeScript 5.3+
+- TypeScript 5.4+
+- TypeScript 5.5+
+- TypeScript 5.6+
+- TypeScript 5.7+ (latest)
+
+<Tip>
+For the best experience, use TypeScript 5.4 or later.
+</Tip>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="rocket" href="/frameworks/solid/quick-start">
+    Build your first type-safe Solid Query app
+  </Card>
+  <Card title="DevTools" icon="wrench" href="/frameworks/solid/devtools">
+    Debug your queries with DevTools
+  </Card>
+</CardGroup>

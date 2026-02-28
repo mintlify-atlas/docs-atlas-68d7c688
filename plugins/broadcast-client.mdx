@@ -1,0 +1,435 @@
+---
+title: broadcastQueryClient
+description: Synchronize your QueryClient state across browser tabs and windows
+---
+
+<Warning>
+  **Experimental**: This utility is currently in an experimental stage. Breaking changes may occur in minor and patch releases. Use at your own risk and lock your version to avoid unexpected breakages.
+</Warning>
+
+`broadcastQueryClient` is a utility for broadcasting and syncing the state of your QueryClient between browser tabs/windows with the same origin.
+
+## Use Cases
+
+- Keep data synchronized across multiple tabs
+- Reflect mutations in all open tabs instantly
+- Share cache updates across windows
+- Provide a seamless multi-tab experience
+
+## Installation
+
+This utility comes as a separate package:
+
+<CodeGroup>
+```bash npm
+npm i @tanstack/query-broadcast-client-experimental
+```
+
+```bash pnpm
+pnpm add @tanstack/query-broadcast-client-experimental
+```
+
+```bash yarn
+yarn add @tanstack/query-broadcast-client-experimental
+```
+
+```bash bun
+bun add @tanstack/query-broadcast-client-experimental
+```
+</CodeGroup>
+
+## Quick Start
+
+```typescript
+import { QueryClient } from '@tanstack/react-query'
+import { broadcastQueryClient } from '@tanstack/query-broadcast-client-experimental'
+
+const queryClient = new QueryClient()
+
+broadcastQueryClient({
+  queryClient,
+  broadcastChannel: 'my-app',
+})
+```
+
+That's it! Your QueryClient state will now be synchronized across all tabs.
+
+## How It Works
+
+The utility uses the [Broadcast Channel API](https://developer.mozilla.org/en-US/docs/Web/API/Broadcast_Channel_API) to communicate between tabs:
+
+1. When the QueryClient cache changes in one tab, the change is broadcast
+2. Other tabs receive the broadcast and update their QueryClient
+3. All tabs stay in sync automatically
+
+<Note>
+  The Broadcast Channel API is supported in all modern browsers (Chrome 54+, Firefox 38+, Edge 79+, Safari 15.4+). It does not work across different origins.
+</Note>
+
+## API
+
+### `broadcastQueryClient`
+
+```typescript
+broadcastQueryClient({
+  queryClient,
+  broadcastChannel?: string,
+})
+```
+
+**Options:**
+
+- `queryClient` (required): The QueryClient instance to broadcast
+- `broadcastChannel` (optional): Channel name for communication (default: `'tanstack-query'`)
+
+### Options Interface
+
+```typescript
+interface BroadcastQueryClientOptions {
+  /** The QueryClient to sync */
+  queryClient: QueryClient
+  /** Unique channel name for communication between tabs */
+  broadcastChannel?: string
+}
+```
+
+## Examples
+
+### Basic Usage
+
+```typescript App.tsx
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { broadcastQueryClient } from '@tanstack/query-broadcast-client-experimental'
+
+const queryClient = new QueryClient()
+
+broadcastQueryClient({
+  queryClient,
+  broadcastChannel: 'my-app',
+})
+
+function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <YourApp />
+    </QueryClientProvider>
+  )
+}
+```
+
+Now when you:
+- Fetch data in one tab, other tabs get updated
+- Run a mutation in one tab, other tabs reflect the change
+- Invalidate queries in one tab, other tabs refetch
+
+### Multiple Applications
+
+Use different channel names for different apps:
+
+```typescript
+// App 1
+broadcastQueryClient({
+  queryClient: queryClient1,
+  broadcastChannel: 'app-1',
+})
+
+// App 2
+broadcastQueryClient({
+  queryClient: queryClient2,
+  broadcastChannel: 'app-2',
+})
+```
+
+### With React
+
+```typescript
+import { useEffect } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
+import { broadcastQueryClient } from '@tanstack/query-broadcast-client-experimental'
+
+function App() {
+  const queryClient = useQueryClient()
+
+  useEffect(() => {
+    broadcastQueryClient({
+      queryClient,
+      broadcastChannel: 'my-app',
+    })
+  }, [queryClient])
+
+  return <YourApp />
+}
+```
+
+### With Persistence
+
+Combine with persistence for offline-first multi-tab apps:
+
+```typescript
+import { QueryClient } from '@tanstack/react-query'
+import { broadcastQueryClient } from '@tanstack/query-broadcast-client-experimental'
+import { persistQueryClient } from '@tanstack/react-query-persist-client'
+import { createSyncStoragePersister } from '@tanstack/query-sync-storage-persister'
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      gcTime: 1000 * 60 * 60 * 24, // 24 hours
+    },
+  },
+})
+
+// Enable broadcasting
+broadcastQueryClient({
+  queryClient,
+  broadcastChannel: 'my-app',
+})
+
+// Enable persistence
+const persister = createSyncStoragePersister({
+  storage: window.localStorage,
+})
+
+persistQueryClient({
+  queryClient,
+  persister,
+})
+```
+
+Now you have:
+- Real-time sync across tabs (broadcast)
+- Data persisted across sessions (persist)
+
+## What Gets Synchronized?
+
+The broadcast synchronizes:
+
+- **Query data**: Fresh data from successful queries
+- **Query status**: Loading, error, success states
+- **Mutations**: Mutation results and status
+- **Cache updates**: Manual cache updates via `setQueryData`
+- **Invalidations**: Query invalidations trigger refetches in all tabs
+
+<Note>
+  The broadcast is one-way communication. Each tab maintains its own QueryClient but listens for updates from other tabs.
+</Note>
+
+## Performance Considerations
+
+### Throttling
+
+By default, broadcasts are throttled to prevent performance issues. The system automatically:
+
+- Batches rapid changes
+- Debounces updates
+- Only broadcasts meaningful changes
+
+### Large Caches
+
+For applications with large caches:
+
+```typescript
+// Only broadcast specific queries
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      // Add meta to control broadcasting
+      meta: {
+        broadcast: true, // only broadcast queries with this meta
+      },
+    },
+  },
+})
+```
+
+<Warning>
+  The Broadcast Channel API has size limits (typically 256KB - 1MB depending on browser). Very large cache updates may fail to broadcast.
+</Warning>
+
+## Debugging
+
+Enable logging to see broadcast activity:
+
+```typescript
+const queryClient = new QueryClient({
+  logger: {
+    log: console.log,
+    warn: console.warn,
+    error: console.error,
+  },
+})
+
+broadcastQueryClient({
+  queryClient,
+  broadcastChannel: 'my-app-debug',
+})
+```
+
+Open DevTools in multiple tabs and watch the console as you interact with the app.
+
+## Browser Compatibility
+
+| Browser | Version | Support |
+|---------|---------|--------|
+| Chrome | 54+ | ✅ |
+| Firefox | 38+ | ✅ |
+| Safari | 15.4+ | ✅ |
+| Edge | 79+ | ✅ |
+| Opera | 41+ | ✅ |
+| IE | Any | ❌ |
+
+<Note>
+  The utility will fail silently in browsers that don't support the Broadcast Channel API. Your app will continue to work, but without cross-tab synchronization.
+</Note>
+
+## Polyfills
+
+For older browsers, you can use a polyfill:
+
+```bash
+npm install broadcast-channel
+```
+
+```typescript
+import { BroadcastChannel } from 'broadcast-channel'
+
+// Polyfill if not natively supported
+if (typeof window !== 'undefined' && !window.BroadcastChannel) {
+  window.BroadcastChannel = BroadcastChannel
+}
+```
+
+## Security Considerations
+
+<Warning>
+  The Broadcast Channel API only works within the same origin (protocol + domain + port). It cannot communicate across different origins.
+</Warning>
+
+### Same-Origin Policy
+
+- `https://example.com` and `https://example.com` ✅ Can communicate
+- `https://example.com` and `http://example.com` ❌ Cannot communicate (different protocol)
+- `https://example.com` and `https://example.com:3000` ❌ Cannot communicate (different port)
+- `https://app.example.com` and `https://example.com` ❌ Cannot communicate (different subdomain)
+
+### Data Privacy
+
+Data broadcast via this API:
+
+- Is not encrypted
+- Is only shared within the same origin
+- Never leaves the user's device
+- Is not visible to other websites
+
+## Limitations
+
+1. **Same origin only**: Cannot sync across different domains/protocols/ports
+2. **Message size limits**: Very large updates may fail to broadcast
+3. **Browser support**: Requires modern browsers
+4. **No persistence**: Broadcasts are ephemeral (combine with persist for durability)
+5. **Experimental API**: Subject to breaking changes
+
+## Common Patterns
+
+### Sync After Login
+
+```typescript
+const loginMutation = useMutation({
+  mutationFn: login,
+  onSuccess: () => {
+    // Invalidate in all tabs
+    queryClient.invalidateQueries({ queryKey: ['user'] })
+  },
+})
+```
+
+When a user logs in one tab, all tabs fetch fresh user data.
+
+### Sync Shopping Cart
+
+```typescript
+const addToCartMutation = useMutation({
+  mutationFn: addToCart,
+  onSuccess: () => {
+    queryClient.invalidateQueries({ queryKey: ['cart'] })
+  },
+})
+```
+
+Adding items to cart in one tab updates all tabs instantly.
+
+### Sync Notifications
+
+```typescript
+function useNotifications() {
+  return useQuery({
+    queryKey: ['notifications'],
+    queryFn: fetchNotifications,
+    refetchInterval: 30000, // Poll every 30s
+  })
+}
+```
+
+When one tab fetches notifications, all tabs get updated.
+
+## Troubleshooting
+
+### Changes not syncing
+
+1. **Check browser support**: Open DevTools and verify `BroadcastChannel` exists
+2. **Verify same origin**: Ensure all tabs are on the same protocol/domain/port
+3. **Check channel name**: Ensure all tabs use the same `broadcastChannel` string
+4. **Inspect console**: Look for errors or warnings
+
+### Performance issues
+
+1. **Reduce broadcast frequency**: Increase throttle time or reduce query refetch frequency
+2. **Limit broadcasted data**: Only broadcast essential queries
+3. **Check cache size**: Large caches may cause issues
+
+### Memory leaks
+
+1. **Clean up on unmount**: Ensure QueryClient is properly disposed
+2. **Limit cache size**: Use `gcTime` to control cache size
+3. **Monitor DevTools**: Check memory usage in Performance tab
+
+## TypeScript
+
+Full TypeScript support:
+
+```typescript
+import { QueryClient } from '@tanstack/react-query'
+import {
+  broadcastQueryClient,
+  BroadcastQueryClientOptions,
+} from '@tanstack/query-broadcast-client-experimental'
+
+const queryClient: QueryClient = new QueryClient()
+
+const options: BroadcastQueryClientOptions = {
+  queryClient,
+  broadcastChannel: 'my-app',
+}
+
+broadcastQueryClient(options)
+```
+
+## Further Reading
+
+<CardGroup cols={2}>
+  <Card title="Broadcast Channel API" href="https://developer.mozilla.org/en-US/docs/Web/API/Broadcast_Channel_API" icon="broadcast-tower">
+    Learn about the underlying browser API
+  </Card>
+
+  <Card title="Persist Client" href="/plugins/persist-client" icon="database">
+    Combine broadcasting with persistence
+  </Card>
+
+  <Card title="Offline Support" href="/guides/network-mode" icon="wifi-slash">
+    Understand network modes
+  </Card>
+
+  <Card title="Mutations" href="/guides/mutations" icon="pen-to-square">
+    Learn about mutations that trigger syncing
+  </Card>
+</CardGroup>

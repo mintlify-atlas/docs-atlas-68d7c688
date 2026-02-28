@@ -1,0 +1,481 @@
+---
+title: DevTools
+description: Debug and visualize your React Query cache with DevTools
+---
+
+# React Query DevTools
+
+The React Query DevTools provide a powerful visual interface for debugging and understanding your query cache during development.
+
+## Installation
+
+Install the DevTools package:
+
+<CodeGroup>
+  ```bash npm
+  npm install @tanstack/react-query-devtools
+  ```
+
+  ```bash pnpm
+  pnpm add @tanstack/react-query-devtools
+  ```
+
+  ```bash yarn
+  yarn add @tanstack/react-query-devtools
+  ```
+
+  ```bash bun
+  bun add @tanstack/react-query-devtools
+  ```
+</CodeGroup>
+
+<Note>
+  The DevTools package only includes development code when `NODE_ENV === 'development'` and is tree-shakeable, making it safe to include in production builds.
+</Note>
+
+## Basic Setup
+
+Add the DevTools component inside your `QueryClientProvider`:
+
+```tsx
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
+
+const queryClient = new QueryClient()
+
+function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      {/* Your app */}
+      <ReactQueryDevtools initialIsOpen={false} />
+    </QueryClientProvider>
+  )
+}
+```
+
+The DevTools will appear as a floating button in the bottom-right corner of your screen (by default).
+
+<Tip>
+  The DevTools component automatically returns `null` in production (`NODE_ENV !== 'development'`), so you don't need to conditionally render it.
+</Tip>
+
+## Configuration Options
+
+Customize the DevTools appearance and behavior:
+
+```tsx
+import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
+
+function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <YourApp />
+      <ReactQueryDevtools
+        initialIsOpen={false}
+        buttonPosition="bottom-right"
+        position="bottom"
+        client={queryClient}
+      />
+    </QueryClientProvider>
+  )
+}
+```
+
+### Available Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `initialIsOpen` | `boolean` | `false` | Start with DevTools open |
+| `buttonPosition` | `"top-left" \| "top-right" \| "bottom-left" \| "bottom-right"` | `"bottom-right"` | Position of toggle button |
+| `position` | `"top" \| "bottom" \| "left" \| "right"` | `"bottom"` | Position of DevTools panel |
+| `client` | `QueryClient` | from context | Custom QueryClient instance |
+| `errorTypes` | `DevtoolsErrorType[]` | `[]` | Custom error type definitions |
+| `styleNonce` | `string` | `undefined` | CSP nonce for inline styles |
+| `shadowDOMTarget` | `ShadowRoot` | `undefined` | Attach styles to shadow DOM |
+| `hideDisabledQueries` | `boolean` | `false` | Hide disabled queries from panel |
+
+## DevTools Panel
+
+For more control over the DevTools UI, use the `ReactQueryDevtoolsPanel` component:
+
+```tsx
+import { useState } from 'react'
+import { ReactQueryDevtoolsPanel } from '@tanstack/react-query-devtools'
+
+function App() {
+  const [showDevtools, setShowDevtools] = useState(false)
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <div>
+        <button onClick={() => setShowDevtools((old) => !old)}>
+          Toggle Devtools
+        </button>
+        <YourApp />
+        {showDevtools && (
+          <ReactQueryDevtoolsPanel
+            style={{
+              position: 'fixed',
+              bottom: 0,
+              right: 0,
+              width: '500px',
+              height: '400px',
+            }}
+          />
+        )}
+      </div>
+    </QueryClientProvider>
+  )
+}
+```
+
+<Note>
+  `ReactQueryDevtoolsPanel` gives you full control over when and where to display the DevTools UI.
+</Note>
+
+## Features
+
+### Query Inspector
+
+The DevTools provide detailed information about each query:
+
+<Steps>
+  <Step title="Query List">
+    View all queries in your cache with their current status:
+    - Fresh (green)
+    - Fetching (blue)
+    - Stale (yellow)
+    - Inactive (gray)
+  </Step>
+
+  <Step title="Query Details">
+    Click on a query to see:
+    - Query key
+    - Query state (data, error, status)
+    - Observers count
+    - Last updated timestamp
+    - Data update count
+  </Step>
+
+  <Step title="Actions">
+    Perform actions on queries:
+    - Refetch query
+    - Invalidate query
+    - Reset query
+    - Remove query from cache
+  </Step>
+</Steps>
+
+### Query States
+
+Queries are color-coded by status:
+
+| Color | Status | Description |
+|-------|--------|-------------|
+| Green | Fresh | Data is fresh and cached |
+| Yellow | Stale | Data exists but is stale |
+| Blue | Fetching | Currently fetching data |
+| Gray | Inactive | No active observers |
+| Red | Error | Query has an error |
+
+### Cache Explorer
+
+Inspect the query cache structure:
+
+```tsx
+function Example() {
+  // These queries will appear in DevTools
+  const posts = useQuery({ queryKey: ['posts'], queryFn: fetchPosts })
+  const user = useQuery({ queryKey: ['user', userId], queryFn: fetchUser })
+  
+  return <div>...</div>
+}
+```
+
+In DevTools, you'll see:
+```
+['posts'] - Fresh
+  └─ data: [{ id: 1, title: '...' }, ...]
+['user', 1] - Stale
+  └─ data: { id: 1, name: 'John' }
+```
+
+### Mutation Tracking
+
+Monitor active mutations:
+
+```tsx
+function CreatePost() {
+  const mutation = useMutation({
+    mutationFn: createPost,
+    mutationKey: ['createPost'], // Optional key for DevTools
+  })
+
+  return <button onClick={() => mutation.mutate(data)}>Create</button>
+}
+```
+
+Mutations appear in the DevTools with:
+- Mutation key (if provided)
+- Status (idle, pending, success, error)
+- Variables passed to mutate
+- Data returned from mutation
+- Error information (if failed)
+
+## Production DevTools
+
+To use DevTools in production (not recommended for public sites):
+
+```tsx
+import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
+
+// Force DevTools in production
+function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <YourApp />
+      {/* This will render even in production */}
+      <ReactQueryDevtools initialIsOpen={false} />
+    </QueryClientProvider>
+  )
+}
+```
+
+For better control, use lazy loading:
+
+```tsx
+import { lazy, Suspense, useState } from 'react'
+
+const ReactQueryDevtoolsProduction = lazy(() =>
+  import('@tanstack/react-query-devtools/production').then((d) => ({
+    default: d.ReactQueryDevtools,
+  }))
+)
+
+function App() {
+  const [showDevtools, setShowDevtools] = useState(false)
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <YourApp />
+      {process.env.NODE_ENV === 'development' && (
+        <ReactQueryDevtools initialIsOpen={false} />
+      )}
+      {showDevtools && (
+        <Suspense fallback={null}>
+          <ReactQueryDevtoolsProduction />
+        </Suspense>
+      )}
+    </QueryClientProvider>
+  )
+}
+```
+
+<Warning>
+  Be cautious when enabling DevTools in production as it exposes your query cache data. Only use this for debugging specific production issues.
+</Warning>
+
+## Debugging Tips
+
+### Identify Stale Queries
+
+Yellow (stale) queries indicate data that will refetch on the next interaction:
+
+```tsx
+// Adjust staleTime to reduce refetching
+useQuery({
+  queryKey: ['posts'],
+  queryFn: fetchPosts,
+  staleTime: 5 * 60 * 1000, // 5 minutes
+})
+```
+
+### Find Memory Leaks
+
+Look for inactive queries that aren't being garbage collected:
+
+```tsx
+// Adjust gcTime to clear unused data sooner
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      gcTime: 5 * 60 * 1000, // 5 minutes instead of default 10
+    },
+  },
+})
+```
+
+### Monitor Refetch Behavior
+
+Watch the blue (fetching) indicator to understand when queries refetch:
+
+```tsx
+useQuery({
+  queryKey: ['posts'],
+  queryFn: fetchPosts,
+  refetchOnWindowFocus: false, // Disable if too aggressive
+  refetchOnMount: false,
+  refetchInterval: 30000, // Or add polling
+})
+```
+
+### Debug Query Keys
+
+Inspect query keys to ensure proper invalidation:
+
+```tsx
+// These are different queries
+queryKey: ['posts', { page: 1 }]
+queryKey: ['posts', { page: 2 }]
+
+// Invalidate all posts queries
+queryClient.invalidateQueries({ queryKey: ['posts'] })
+```
+
+<Tip>
+  Use the DevTools to copy query keys and test invalidation patterns in your code.
+</Tip>
+
+## Keyboard Shortcuts
+
+When DevTools are open:
+
+| Key | Action |
+|-----|--------|
+| `ESC` | Close DevTools |
+| `r` | Refetch selected query |
+| `i` | Invalidate selected query |
+| `x` | Remove selected query |
+
+## Integration with Browser DevTools
+
+React Query DevTools work alongside browser developer tools:
+
+```tsx
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+
+function Debug() {
+  const queryClient = useQueryClient()
+  
+  // Access cache programmatically
+  const debugCache = () => {
+    console.log('All queries:', queryClient.getQueryCache().getAll())
+    console.log('Query data:', queryClient.getQueryData(['posts']))
+  }
+  
+  return <button onClick={debugCache}>Log Cache</button>
+}
+```
+
+## Custom Error Types
+
+Define custom error types for better DevTools display:
+
+```tsx
+import type { DevtoolsErrorType } from '@tanstack/react-query-devtools'
+
+const errorTypes: DevtoolsErrorType[] = [
+  {
+    name: 'API Error',
+    initializer: (error: any) => error.statusCode >= 400 && error.statusCode < 500,
+  },
+  {
+    name: 'Network Error',
+    initializer: (error: any) => error.message.includes('network'),
+  },
+]
+
+function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <YourApp />
+      <ReactQueryDevtools errorTypes={errorTypes} />
+    </QueryClientProvider>
+  )
+}
+```
+
+## Shadow DOM Support
+
+Render DevTools inside a Shadow DOM:
+
+```tsx
+import { useEffect, useRef } from 'react'
+
+function App() {
+  const shadowHostRef = useRef<HTMLDivElement>(null)
+  const shadowRootRef = useRef<ShadowRoot>()
+
+  useEffect(() => {
+    if (shadowHostRef.current && !shadowRootRef.current) {
+      shadowRootRef.current = shadowHostRef.current.attachShadow({ mode: 'open' })
+    }
+  }, [])
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <YourApp />
+      <div ref={shadowHostRef} />
+      {shadowRootRef.current && (
+        <ReactQueryDevtools shadowDOMTarget={shadowRootRef.current} />
+      )}
+    </QueryClientProvider>
+  )
+}
+```
+
+## Troubleshooting
+
+### DevTools Not Appearing
+
+<Steps>
+  <Step title="Check Environment">
+    Ensure `NODE_ENV` is set to `'development'`:
+    ```tsx
+    console.log(process.env.NODE_ENV) // Should be 'development'
+    ```
+  </Step>
+
+  <Step title="Verify Installation">
+    Confirm the package is installed:
+    ```bash
+    npm list @tanstack/react-query-devtools
+    ```
+  </Step>
+
+  <Step title="Check Provider">
+    Ensure DevTools is inside `QueryClientProvider`:
+    ```tsx
+    <QueryClientProvider client={queryClient}>
+      <App />
+      <ReactQueryDevtools /> {/* Must be here */}
+    </QueryClientProvider>
+    ```
+  </Step>
+</Steps>
+
+### Performance Issues
+
+If DevTools slow down your app:
+
+```tsx
+// Reduce update frequency
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      notifyOnChangeProps: ['data', 'error'], // Only update on specific props
+    },
+  },
+})
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="TypeScript" icon="code" href="/frameworks/react/typescript">
+    Learn about type-safe debugging
+  </Card>
+  <Card title="Server-Side Rendering" icon="server" href="/frameworks/react/ssr">
+    Debug SSR queries and hydration
+  </Card>
+</CardGroup>

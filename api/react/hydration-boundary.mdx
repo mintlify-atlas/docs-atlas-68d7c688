@@ -1,0 +1,338 @@
+---
+title: HydrationBoundary
+description: API reference for the HydrationBoundary component
+---
+
+The `HydrationBoundary` component is used to hydrate dehydrated query data on the client. This is essential for server-side rendering (SSR) with TanStack Query.
+
+## Import
+
+```typescript
+import { HydrationBoundary } from '@tanstack/react-query'
+```
+
+## Signature
+
+```typescript
+function HydrationBoundary({
+  state,
+  options,
+  children,
+  queryClient,
+}: HydrationBoundaryProps): React.ReactElement
+```
+
+## Props
+
+<ParamField path="state" type="DehydratedState | null | undefined" required>
+  The dehydrated state object obtained from `dehydrate(queryClient)` on the server.
+  
+  ```typescript
+  interface DehydratedState {
+    queries: DehydratedQuery[]
+    mutations?: DehydratedMutation[]
+  }
+  ```
+</ParamField>
+
+<ParamField path="options" type="HydrateOptions">
+  Optional hydration options.
+
+  <Expandable title="properties">
+    <ParamField path="defaultOptions" type="object">
+      Default options for hydrated queries.
+      
+      <Expandable title="properties">
+        <ParamField path="queries" type="object">
+          Default query options to apply to all hydrated queries.
+          
+          ```typescript
+          {
+            queries: {
+              staleTime: 1000 * 60 * 5, // 5 minutes
+            }
+          }
+          ```
+        </ParamField>
+      </Expandable>
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="children" type="React.ReactNode">
+  The React components that will have access to the hydrated data.
+</ParamField>
+
+<ParamField path="queryClient" type="QueryClient">
+  Optional QueryClient instance. If not provided, uses the QueryClient from context.
+</ParamField>
+
+## Examples
+
+### Basic Usage with Next.js App Router
+
+```typescript
+import {
+  dehydrate,
+  HydrationBoundary,
+  QueryClient,
+} from '@tanstack/react-query'
+import { TodoList } from './TodoList'
+
+export default async function TodosPage() {
+  const queryClient = new QueryClient()
+
+  await queryClient.prefetchQuery({
+    queryKey: ['todos'],
+    queryFn: fetchTodos,
+  })
+
+  return (
+    <HydrationBoundary state={dehydrate(queryClient)}>
+      <TodoList />
+    </HydrationBoundary>
+  )
+}
+```
+
+### Client Component Using Hydrated Data
+
+```typescript
+'use client'
+
+import { useQuery } from '@tanstack/react-query'
+
+export function TodoList() {
+  const { data } = useQuery({
+    queryKey: ['todos'],
+    queryFn: fetchTodos,
+  })
+
+  // Data is immediately available from hydration
+  return (
+    <ul>
+      {data?.map(todo => (
+        <li key={todo.id}>{todo.title}</li>
+      ))}
+    </ul>
+  )
+}
+```
+
+### With Next.js Pages Router
+
+```typescript
+import { dehydrate, HydrationBoundary, QueryClient } from '@tanstack/react-query'
+import { GetServerSideProps } from 'next'
+import { TodoList } from '../components/TodoList'
+
+export const getServerSideProps: GetServerSideProps = async () => {
+  const queryClient = new QueryClient()
+
+  await queryClient.prefetchQuery({
+    queryKey: ['todos'],
+    queryFn: fetchTodos,
+  })
+
+  return {
+    props: {
+      dehydratedState: dehydrate(queryClient),
+    },
+  }
+}
+
+interface PageProps {
+  dehydratedState: any
+}
+
+export default function TodosPage({ dehydratedState }: PageProps) {
+  return (
+    <HydrationBoundary state={dehydratedState}>
+      <TodoList />
+    </HydrationBoundary>
+  )
+}
+```
+
+### With Custom Options
+
+```typescript
+import { dehydrate, HydrationBoundary, QueryClient } from '@tanstack/react-query'
+
+export default async function Page() {
+  const queryClient = new QueryClient()
+
+  await queryClient.prefetchQuery({
+    queryKey: ['todos'],
+    queryFn: fetchTodos,
+  })
+
+  return (
+    <HydrationBoundary
+      state={dehydrate(queryClient)}
+      options={{
+        defaultOptions: {
+          queries: {
+            staleTime: 1000 * 60 * 5, // 5 minutes
+          },
+        },
+      }}
+    >
+      <TodoList />
+    </HydrationBoundary>
+  )
+}
+```
+
+### Multiple Hydration Boundaries
+
+```typescript
+import { dehydrate, HydrationBoundary, QueryClient } from '@tanstack/react-query'
+import { TodoList } from './TodoList'
+import { UserProfile } from './UserProfile'
+
+export default async function DashboardPage() {
+  const todosClient = new QueryClient()
+  const userClient = new QueryClient()
+
+  await Promise.all([
+    todosClient.prefetchQuery({
+      queryKey: ['todos'],
+      queryFn: fetchTodos,
+    }),
+    userClient.prefetchQuery({
+      queryKey: ['user'],
+      queryFn: fetchUser,
+    }),
+  ])
+
+  return (
+    <div>
+      <HydrationBoundary state={dehydrate(userClient)}>
+        <UserProfile />
+      </HydrationBoundary>
+      <HydrationBoundary state={dehydrate(todosClient)}>
+        <TodoList />
+      </HydrationBoundary>
+    </div>
+  )
+}
+```
+
+### With Infinite Queries
+
+```typescript
+import { dehydrate, HydrationBoundary, QueryClient } from '@tanstack/react-query'
+import { ProjectList } from './ProjectList'
+
+export default async function ProjectsPage() {
+  const queryClient = new QueryClient()
+
+  await queryClient.prefetchInfiniteQuery({
+    queryKey: ['projects'],
+    queryFn: ({ pageParam }) => fetchProjects(pageParam),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
+  })
+
+  return (
+    <HydrationBoundary state={dehydrate(queryClient)}>
+      <ProjectList />
+    </HydrationBoundary>
+  )
+}
+```
+
+### Conditional Hydration
+
+```typescript
+import { dehydrate, HydrationBoundary, QueryClient } from '@tanstack/react-query'
+
+interface PageProps {
+  userId?: string
+}
+
+export default async function UserPage({ userId }: PageProps) {
+  const queryClient = new QueryClient()
+
+  if (userId) {
+    await queryClient.prefetchQuery({
+      queryKey: ['user', userId],
+      queryFn: () => fetchUser(userId),
+    })
+  }
+
+  return (
+    <HydrationBoundary state={userId ? dehydrate(queryClient) : null}>
+      <UserProfile userId={userId} />
+    </HydrationBoundary>
+  )
+}
+```
+
+### With Streaming (React Server Components)
+
+```typescript
+import { dehydrate, HydrationBoundary, QueryClient } from '@tanstack/react-query'
+import { Suspense } from 'react'
+
+export default async function StreamingPage() {
+  const queryClient = new QueryClient()
+
+  // Prefetch critical data
+  await queryClient.prefetchQuery({
+    queryKey: ['critical-data'],
+    queryFn: fetchCriticalData,
+  })
+
+  // Don't await non-critical data
+  queryClient.prefetchQuery({
+    queryKey: ['non-critical-data'],
+    queryFn: fetchNonCriticalData,
+  })
+
+  return (
+    <HydrationBoundary state={dehydrate(queryClient)}>
+      <div>
+        <CriticalComponent />
+        <Suspense fallback={<div>Loading...</div>}>
+          <NonCriticalComponent />
+        </Suspense>
+      </div>
+    </HydrationBoundary>
+  )
+}
+```
+
+## Behavior
+
+The `HydrationBoundary` component:
+
+1. Hydrates the dehydrated state into the QueryClient cache
+2. Intelligently handles queries that already exist in the cache
+3. For new queries, hydrates them immediately during render
+4. For existing queries, defers hydration until after render (to avoid updating during transitions)
+5. Compares timestamps to determine if hydrated data is newer than cached data
+6. Works seamlessly with React Suspense and Server Components
+
+## Notes
+
+<Note>
+  `HydrationBoundary` must be used within a `QueryClientProvider` component.
+</Note>
+
+<Note>
+  The `state` prop can be `null` or `undefined`, in which case no hydration occurs.
+</Note>
+
+<Note>
+  Hydration happens during render for new queries and after render for existing queries to support React transitions.
+</Note>
+
+<Note>
+  When using with Next.js App Router, the server component should create a new QueryClient and pass the dehydrated state to the client component.
+</Note>
+
+<Note>
+  The dehydrated state is serializable and can be passed through Next.js props or other serialization boundaries.
+</Note>

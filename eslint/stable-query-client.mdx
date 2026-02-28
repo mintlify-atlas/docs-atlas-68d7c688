@@ -1,0 +1,383 @@
+---
+title: stable-query-client
+description: Ensure QueryClient is created outside component render to prevent cache resets
+---
+
+<Note>
+  **Attributes**: ✅ Recommended • 🔧 Fixable
+</Note>
+
+## Overview
+
+The QueryClient contains the QueryCache, so you'd only want to create one instance of the QueryClient for the lifecycle of your application - not a new instance on every render.
+
+Creating a new QueryClient on every render will:
+
+1. Reset your entire cache
+2. Cause all queries to refetch
+3. Break optimistic updates
+4. Cause performance issues
+
+## Rule Details
+
+This rule prevents creating a new QueryClient instance inside a component function body, which would cause it to be recreated on every render.
+
+## Examples
+
+### Incorrect Code
+
+<CodeGroup>
+```typescript Component Body
+/* eslint "@tanstack/query/stable-query-client": "error" */
+
+function App() {
+  // ❌ New QueryClient created on every render
+  const queryClient = new QueryClient()
+  
+  return (
+    <QueryClientProvider client={queryClient}>
+      <Home />
+    </QueryClientProvider>
+  )
+}
+```
+
+```typescript Multiple Instances
+function Dashboard() {
+  // ❌ Different QueryClient for each dashboard instance
+  const queryClient = new QueryClient()
+  
+  return (
+    <QueryClientProvider client={queryClient}>
+      <DashboardContent />
+    </QueryClientProvider>
+  )
+}
+```
+</CodeGroup>
+
+### Correct Code
+
+<CodeGroup>
+```typescript Module-Level Creation
+// ✅ QueryClient created once at module level
+const queryClient = new QueryClient()
+
+function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <Home />
+    </QueryClientProvider>
+  )
+}
+```
+
+```typescript useState Initialization
+// ✅ QueryClient created once using useState
+function App() {
+  const [queryClient] = useState(() => new QueryClient())
+  
+  return (
+    <QueryClientProvider client={queryClient}>
+      <Home />
+    </QueryClientProvider>
+  )
+}
+```
+
+```typescript useMemo
+// ✅ QueryClient memoized (though useState is preferred)
+function App() {
+  const queryClient = useMemo(() => new QueryClient(), [])
+  
+  return (
+    <QueryClientProvider client={queryClient}>
+      <Home />
+    </QueryClientProvider>
+  )
+}
+```
+
+```typescript useRef
+// ✅ QueryClient stored in ref
+function App() {
+  const queryClientRef = useRef<QueryClient>()
+  
+  if (!queryClientRef.current) {
+    queryClientRef.current = new QueryClient()
+  }
+  
+  return (
+    <QueryClientProvider client={queryClientRef.current}>
+      <Home />
+    </QueryClientProvider>
+  )
+}
+```
+</CodeGroup>
+
+## Exception: Server Components
+
+<Note>
+  It's allowed to create a new QueryClient inside an async Server Component, because the async function is only called once on the server.
+</Note>
+
+```typescript Server Component (Next.js App Router)
+// ✅ OK in Server Components
+export default async function ServerComponent() {
+  const queryClient = new QueryClient()
+  
+  await queryClient.prefetchQuery({
+    queryKey: ['posts'],
+    queryFn: fetchPosts,
+  })
+  
+  return (
+    <HydrationBoundary state={dehydrate(queryClient)}>
+      <Posts />
+    </HydrationBoundary>
+  )
+}
+```
+
+The rule understands async function contexts and won't flag this pattern.
+
+## Common Patterns
+
+### App-Level Provider
+
+The most common pattern is creating the QueryClient at the module level:
+
+```typescript App.tsx
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 60 * 1000, // 1 minute
+      gcTime: 5 * 60 * 1000, // 5 minutes
+    },
+  },
+})
+
+function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <YourApp />
+    </QueryClientProvider>
+  )
+}
+```
+
+### Component-Level Provider
+
+Sometimes you need a provider lower in the tree. Use `useState`:
+
+```typescript NestedProvider.tsx
+function NestedProvider({ children }: { children: React.ReactNode }) {
+  const [queryClient] = useState(
+    () =>
+      new QueryClient({
+        defaultOptions: {
+          queries: {
+            staleTime: Infinity,
+          },
+        },
+      }),
+  )
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      {children}
+    </QueryClientProvider>
+  )
+}
+```
+
+### Testing Setup
+
+In tests, create a new client for each test:
+
+```typescript test-utils.tsx
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { render } from '@testing-library/react'
+
+export function createTestQueryClient() {
+  return new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false,
+      },
+      mutations: {
+        retry: false,
+      },
+    },
+    logger: {
+      log: console.log,
+      warn: console.warn,
+      error: () => {}, // Suppress errors in tests
+    },
+  })
+}
+
+export function renderWithClient(ui: React.ReactElement) {
+  const testQueryClient = createTestQueryClient()
+  const { rerender, ...result } = render(
+    <QueryClientProvider client={testQueryClient}>
+      {ui}
+    </QueryClientProvider>,
+  )
+  return {
+    ...result,
+    rerender: (rerenderUi: React.ReactElement) =>
+      rerender(
+        <QueryClientProvider client={testQueryClient}>
+          {rerenderUi}
+        </QueryClientProvider>,
+      ),
+  }
+}
+```
+
+## Why useState Over useMemo?
+
+<Accordion title="useState is more reliable">
+  `useState` with a function initializer is the recommended approach because:
+
+  1. **Guaranteed single execution**: The initializer function runs exactly once
+  2. **No dependencies**: Unlike `useMemo`, you can't accidentally provide wrong dependencies
+  3. **React concurrent mode safe**: Works correctly with React 18+ concurrent features
+  4. **Clearer intent**: Signals that this value should never change
+
+  ```typescript
+  // ✅ Best: useState with initializer
+  const [queryClient] = useState(() => new QueryClient())
+
+  // ⚠️ Works but less ideal: useMemo
+  const queryClient = useMemo(() => new QueryClient(), [])
+  ```
+</Accordion>
+
+## Auto-Fix
+
+This rule includes an auto-fixer that will wrap your QueryClient creation in `useState`:
+
+```bash
+eslint --fix src/
+```
+
+Before:
+```typescript
+function App() {
+  const queryClient = new QueryClient()
+  // ...
+}
+```
+
+After:
+```typescript
+function App() {
+  const [queryClient] = useState(() => new QueryClient())
+  // ...
+}
+```
+
+<Warning>
+  Review auto-fixes to ensure they're appropriate for your use case.
+</Warning>
+
+## Multiple QueryClients
+
+Sometimes you need multiple QueryClient instances (e.g., for isolated contexts):
+
+```typescript
+// ✅ Multiple stable instances
+const appQueryClient = new QueryClient()
+const adminQueryClient = new QueryClient({
+  defaultOptions: {
+    queries: { staleTime: 0 },
+  },
+})
+
+function App() {
+  return (
+    <QueryClientProvider client={appQueryClient}>
+      <AppContent />
+      <QueryClientProvider client={adminQueryClient}>
+        <AdminPanel />
+      </QueryClientProvider>
+    </QueryClientProvider>
+  )
+}
+```
+
+## Framework-Specific Patterns
+
+### Next.js App Router
+
+```typescript app/providers.tsx
+'use client'
+
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { useState } from 'react'
+
+export function Providers({ children }: { children: React.ReactNode }) {
+  const [queryClient] = useState(() => new QueryClient())
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      {children}
+    </QueryClientProvider>
+  )
+}
+```
+
+### Remix
+
+```typescript app/root.tsx
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { useState } from 'react'
+
+export default function App() {
+  const [queryClient] = useState(() => new QueryClient())
+
+  return (
+    <html>
+      <body>
+        <QueryClientProvider client={queryClient}>
+          <Outlet />
+        </QueryClientProvider>
+      </body>
+    </html>
+  )
+}
+```
+
+## Debugging
+
+If you suspect your QueryClient is being recreated:
+
+```typescript
+const [queryClient] = useState(() => {
+  console.log('Creating QueryClient')
+  return new QueryClient()
+})
+
+// This should only log once per component mount
+```
+
+## Related Rules
+
+- [exhaustive-deps](./exhaustive-deps) - Ensures proper query key dependencies
+
+## Further Reading
+
+<CardGroup cols={2}>
+  <Card title="QueryClient" href="/reference/QueryClient" icon="database">
+    Learn about QueryClient configuration options
+  </Card>
+
+  <Card title="Important Defaults" href="/guides/important-defaults" icon="circle-info">
+    Understand TanStack Query's default behaviors
+  </Card>
+</CardGroup>

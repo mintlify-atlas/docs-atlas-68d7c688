@@ -1,0 +1,594 @@
+---
+title: Migrating to TanStack Query v5
+description: Complete migration guide for upgrading from v4 to v5 with breaking changes and new features
+---
+
+v5 is a major version with breaking changes. This guide will help you migrate your application smoothly.
+
+## Breaking Changes
+
+### Single Object Signature Required
+
+TanStack Query v5 only supports the object format. All previous overloads have been removed.
+
+<CodeGroup>
+```typescript Before (v4)
+useQuery(key, fn, options)
+useQuery({ queryKey, queryFn, ...options })
+
+useMutation(fn, options)
+
+queryClient.fetchQuery(key, fn, options)
+```
+
+```typescript After (v5)
+useQuery({ queryKey, queryFn, ...options })
+
+useMutation({ mutationFn, ...options })
+
+queryClient.fetchQuery({ queryKey, queryFn, ...options })
+```
+</CodeGroup>
+
+#### Codemod Available
+
+Run the codemod to automatically migrate:
+
+<CodeGroup>
+```bash JavaScript
+npx jscodeshift@latest ./path/to/src/ \
+  --extensions=js,jsx \
+  --transform=./node_modules/@tanstack/react-query/build/codemods/src/v5/remove-overloads/remove-overloads.cjs
+```
+
+```bash TypeScript
+npx jscodeshift@latest ./path/to/src/ \
+  --extensions=ts,tsx \
+  --parser=tsx \
+  --transform=./node_modules/@tanstack/react-query/build/codemods/src/v5/remove-overloads/remove-overloads.cjs
+```
+</CodeGroup>
+
+<Warning>
+  Run `prettier` and `eslint` after applying the codemod to fix formatting.
+</Warning>
+
+### Query Callbacks Removed
+
+`onSuccess`, `onError`, and `onSettled` callbacks have been removed from `useQuery` and `QueryObserver`. They remain available on mutations.
+
+<CodeGroup>
+```typescript Before (v4)
+useQuery({
+  queryKey: ['todos'],
+  queryFn: fetchTodos,
+  onSuccess: (data) => {
+    console.log('Data loaded', data)
+  },
+  onError: (error) => {
+    console.error('Error loading data', error)
+  },
+})
+```
+
+```typescript After (v5) - Use useEffect
+const { data, error } = useQuery({
+  queryKey: ['todos'],
+  queryFn: fetchTodos,
+})
+
+useEffect(() => {
+  if (data) {
+    console.log('Data loaded', data)
+  }
+}, [data])
+
+useEffect(() => {
+  if (error) {
+    console.error('Error loading data', error)
+  }
+}, [error])
+```
+</CodeGroup>
+
+<Note>
+  See [RFC #5279](https://github.com/TanStack/query/discussions/5279) for the motivation behind this change.
+</Note>
+
+### Renamed `cacheTime` to `gcTime`
+
+The confusing `cacheTime` option has been renamed to `gcTime` (garbage collection time).
+
+```typescript
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      gcTime: 10 * 60 * 1000, // 10 minutes
+    },
+  },
+})
+```
+
+<Accordion title="Why the rename?">
+  `cacheTime` was misleading because it doesn't control how long data is cached while in use. It only controls how long unused data stays in memory before being garbage collected.
+</Accordion>
+
+### Status Changes: `loading` → `pending`
+
+The `loading` status and `isLoading` flag have been renamed:
+
+<CodeGroup>
+```typescript Before (v4)
+const { data, isLoading, isInitialLoading } = useQuery({
+  queryKey: ['todos'],
+  queryFn: fetchTodos,
+})
+
+if (isLoading) return <Spinner />
+```
+
+```typescript After (v5)
+const { data, isPending, isLoading } = useQuery({
+  queryKey: ['todos'],
+  queryFn: fetchTodos,
+})
+
+// isPending: true while query has no data yet
+// isLoading: isPending && isFetching (like old isInitialLoading)
+
+if (isLoading) return <Spinner />
+```
+</CodeGroup>
+
+For mutations:
+
+```typescript
+const mutation = useMutation({
+  mutationFn: addTodo,
+})
+
+// mutation.isPending (was mutation.isLoading)
+// mutation.status === 'pending' (was 'loading')
+```
+
+### TypeScript: `Error` is Default Error Type
+
+Error type now defaults to `Error` instead of `unknown`:
+
+<CodeGroup>
+```typescript Before (v4)
+const { error } = useQuery<Todo[], unknown>({
+  queryKey: ['todos'],
+  queryFn: fetchTodos,
+})
+
+if (error) {
+  // error is unknown, needs type guard
+  console.error(error)
+}
+```
+
+```typescript After (v5)
+const { error } = useQuery<Todo[]>({
+  queryKey: ['todos'],
+  queryFn: fetchTodos,
+})
+
+if (error) {
+  // error is Error by default
+  console.error(error.message)
+}
+```
+</CodeGroup>
+
+To throw non-Error types:
+
+```typescript
+useQuery<number, string>({
+  queryKey: ['some-query'],
+  queryFn: async () => {
+    if (Math.random() > 0.5) throw 'some error'
+    return 42
+  },
+})
+```
+
+### Minimum TypeScript Version: 4.7
+
+TypeScript 4.7 or higher is now required for improved type inference.
+
+### Renamed `useErrorBoundary` to `throwOnError`
+
+```typescript
+useQuery({
+  queryKey: ['todos'],
+  queryFn: fetchTodos,
+  throwOnError: true, // was: useErrorBoundary: true
+})
+```
+
+### `remove` Method Removed from Query Result
+
+<CodeGroup>
+```typescript Before (v4)
+const query = useQuery({ queryKey, queryFn })
+query.remove() // Remove from cache
+```
+
+```typescript After (v5)
+const queryClient = useQueryClient()
+const query = useQuery({ queryKey, queryFn })
+
+queryClient.removeQueries({ queryKey }) // Remove from cache
+```
+</CodeGroup>
+
+### Removed `keepPreviousData` Option
+
+Replaced with `placeholderData` identity function:
+
+<CodeGroup>
+```typescript Before (v4)
+const { data, isPreviousData } = useQuery({
+  queryKey: ['todos', page],
+  queryFn: () => fetchTodos(page),
+  keepPreviousData: true,
+})
+```
+
+```typescript After (v5)
+import { keepPreviousData } from '@tanstack/react-query'
+
+const { data, isPlaceholderData } = useQuery({
+  queryKey: ['todos', page],
+  queryFn: () => fetchTodos(page),
+  placeholderData: keepPreviousData,
+})
+```
+</CodeGroup>
+
+Or use a custom identity function:
+
+```typescript
+placeholderData: (previousData) => previousData
+```
+
+<Warning>
+  `placeholderData` always gives you `success` status, while `keepPreviousData` gave you the previous query status.
+</Warning>
+
+### Infinite Queries Require `initialPageParam`
+
+<CodeGroup>
+```typescript Before (v4)
+useInfiniteQuery({
+  queryKey: ['projects'],
+  queryFn: ({ pageParam = 0 }) => fetchProjects(pageParam),
+  getNextPageParam: (lastPage) => lastPage.nextCursor,
+})
+```
+
+```typescript After (v5)
+useInfiniteQuery({
+  queryKey: ['projects'],
+  queryFn: ({ pageParam }) => fetchProjects(pageParam),
+  initialPageParam: 0,
+  getNextPageParam: (lastPage) => lastPage.nextCursor,
+})
+```
+</CodeGroup>
+
+### Manual Infinite Query Mode Removed
+
+You can no longer pass `pageParam` directly to `fetchNextPage`. The `getNextPageParam` value is always used.
+
+### `null` Now Indicates No More Pages
+
+`getNextPageParam` and `getPreviousPageParam` can now return `null` (in addition to `undefined`) to indicate no more pages:
+
+```typescript
+useInfiniteQuery({
+  queryKey: ['projects'],
+  queryFn: ({ pageParam }) => fetchProjects(pageParam),
+  initialPageParam: 0,
+  getNextPageParam: (lastPage) => lastPage.nextCursor ?? null,
+})
+```
+
+### No Retries on Server by Default
+
+Queries now default to `retry: 0` on the server (was `3` in v4):
+
+```typescript
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: isServer ? 0 : 3,
+    },
+  },
+})
+```
+
+### `refetchInterval` Callback Simplified
+
+<CodeGroup>
+```typescript Before (v4)
+refetchInterval: (data, query) => {
+  if (data?.shouldPoll) return 1000
+  return false
+}
+```
+
+```typescript After (v5)
+refetchInterval: (query) => {
+  if (query.state.data?.shouldPoll) return 1000
+  return false
+}
+```
+</CodeGroup>
+
+### Window Focus Uses `visibilitychange` Only
+
+The `focus` event is no longer used. Only `visibilitychange` is used for detecting window focus.
+
+### Network Status Detection Improved
+
+`navigator.onLine` is no longer used initially. The online status is now determined by `online` and `offline` events only.
+
+### Custom Context Replaced with Custom QueryClient
+
+<CodeGroup>
+```typescript Before (v4)
+const customContext = React.createContext<QueryClient | undefined>(undefined)
+
+const { data } = useQuery(
+  {
+    queryKey: ['users', id],
+    queryFn: () => fetch(...),
+    context: customContext,
+  }
+)
+```
+
+```typescript After (v5)
+import { queryClient } from './my-client'
+
+const { data } = useQuery(
+  {
+    queryKey: ['users', id],
+    queryFn: () => fetch(...),
+  },
+  queryClient,
+)
+```
+</CodeGroup>
+
+### `refetchPage` Removed, Use `maxPages`
+
+Infinite queries now use `maxPages` to limit pages:
+
+```typescript
+useInfiniteQuery({
+  queryKey: ['projects'],
+  queryFn: ({ pageParam }) => fetchProjects(pageParam),
+  initialPageParam: 0,
+  getNextPageParam: (lastPage) => lastPage.nextCursor,
+  getPreviousPageParam: (firstPage) => firstPage.prevCursor,
+  maxPages: 3, // Only keep 3 pages in memory
+})
+```
+
+### `isDataEqual` Removed
+
+Use `structuralSharing` function instead:
+
+<CodeGroup>
+```typescript Before (v4)
+isDataEqual: (oldData, newData) => customCheck(oldData, newData)
+```
+
+```typescript After (v5)
+import { replaceEqualDeep } from '@tanstack/react-query'
+
+structuralSharing: (oldData, newData) => 
+  customCheck(oldData, newData) ? oldData : replaceEqualDeep(oldData, newData)
+```
+</CodeGroup>
+
+### Private Class Fields
+
+TanStack Query now uses ECMAScript private class fields (`#field`). Previously "private" fields are now truly private at runtime.
+
+### Minimum React Version: 18.0
+
+React 18 is now required for the `useSyncExternalStore` hook.
+
+### `Hydrate` Component Renamed to `HydrationBoundary`
+
+<CodeGroup>
+```typescript Before (v4)
+import { Hydrate } from '@tanstack/react-query'
+
+<Hydrate state={dehydratedState}>
+  <App />
+</Hydrate>
+```
+
+```typescript After (v5)
+import { HydrationBoundary } from '@tanstack/react-query'
+
+<HydrationBoundary state={dehydratedState}>
+  <App />
+</HydrationBoundary>
+```
+</CodeGroup>
+
+### Query Defaults Now Merge
+
+`queryClient.setQueryDefaults()` calls now merge instead of overriding. Order from most generic to most specific:
+
+```typescript
+// Set generic defaults first
+queryClient.setQueryDefaults(['todo'], {
+  retry: false,
+  staleTime: 60_000,
+})
+
+// Then specific defaults
+queryClient.setQueryDefaults(['todo', 'detail'], {
+  retry: true,
+  retryDelay: 1_000,
+  staleTime: 10_000,
+})
+```
+
+### `hashQueryKey` Renamed to `hashKey`
+
+Now works with both query and mutation keys:
+
+```typescript
+import { hashKey } from '@tanstack/react-query'
+
+const hash = hashKey(['todos', 1])
+```
+
+## New Features
+
+### Simplified Optimistic Updates
+
+Use `variables` from mutation for optimistic UI:
+
+```typescript
+const queryInfo = useTodos()
+const addTodoMutation = useMutation({
+  mutationFn: (newTodo: string) => axios.post('/api/data', { text: newTodo }),
+  onSettled: () => queryClient.invalidateQueries({ queryKey: ['todos'] }),
+})
+
+return (
+  <ul>
+    {queryInfo.data?.items.map((todo) => (
+      <li key={todo.id}>{todo.text}</li>
+    ))}
+    {addTodoMutation.isPending && (
+      <li style={{ opacity: 0.5 }}>
+        {addTodoMutation.variables}
+      </li>
+    )}
+  </ul>
+)
+```
+
+### `maxPages` for Infinite Queries
+
+Limit pages stored in memory:
+
+```typescript
+useInfiniteQuery({
+  queryKey: ['projects'],
+  queryFn: fetchProjects,
+  initialPageParam: 0,
+  getNextPageParam: (lastPage) => lastPage.nextCursor,
+  getPreviousPageParam: (firstPage) => firstPage.prevCursor,
+  maxPages: 5, // Keep only 5 pages
+})
+```
+
+### Prefetch Multiple Pages
+
+Infinite queries can prefetch multiple pages:
+
+```typescript
+await queryClient.prefetchInfiniteQuery({
+  queryKey: ['projects'],
+  queryFn: fetchProjects,
+  initialPageParam: 0,
+  getNextPageParam: (lastPage) => lastPage.nextCursor,
+  pages: 3, // Prefetch first 3 pages
+})
+```
+
+### `combine` Option for `useQueries`
+
+Combine results from multiple queries:
+
+```typescript
+const result = useQueries({
+  queries: [
+    { queryKey: ['post', 1], queryFn: () => fetchPost(1) },
+    { queryKey: ['post', 2], queryFn: () => fetchPost(2) },
+  ],
+  combine: (results) => {
+    return {
+      data: results.map((result) => result.data),
+      pending: results.some((result) => result.isPending),
+    }
+  },
+})
+```
+
+### Suspense Hooks
+
+Dedicated suspense hooks with better types:
+
+```typescript
+const { data } = useSuspenseQuery({
+  queryKey: ['post', postId],
+  queryFn: () => fetchPost(postId),
+})
+
+// data is never undefined!
+```
+
+Also available:
+- `useSuspenseInfiniteQuery`
+- `useSuspenseQueries`
+
+### Experimental Fine-Grained Persister
+
+New experimental persister for better performance. See the [createPersister docs](/plugins/createPersister).
+
+## Migration Checklist
+
+<Steps>
+  <Step title="Update Dependencies">
+    ```bash
+    npm install @tanstack/react-query@latest
+    npm install @tanstack/react-query-devtools@latest
+    ```
+  </Step>
+
+  <Step title="Run Codemod">
+    Apply the automated codemod for removing overloads.
+  </Step>
+
+  <Step title="Replace Callbacks">
+    Move `onSuccess`, `onError`, `onSettled` from queries to `useEffect`.
+  </Step>
+
+  <Step title="Update Status Checks">
+    Change `isLoading` to `isPending` where needed.
+  </Step>
+
+  <Step title="Rename Options">
+    - `cacheTime` → `gcTime`
+    - `useErrorBoundary` → `throwOnError`
+    - `keepPreviousData` → `placeholderData: keepPreviousData`
+  </Step>
+
+  <Step title="Update Infinite Queries">
+    Add `initialPageParam` to all infinite queries.
+  </Step>
+
+  <Step title="Update Hydration">
+    Rename `Hydrate` to `HydrationBoundary`.
+  </Step>
+
+  <Step title="Test Thoroughly">
+    Test all query and mutation functionality.
+  </Step>
+</Steps>
+
+<Note>
+  Take your time with the migration. v5 brings significant improvements worth the effort!
+</Note>

@@ -1,0 +1,390 @@
+---
+title: Disabling Queries
+description: Control when queries execute with conditional query patterns
+---
+
+Disabling queries allows you to control precisely when queries should run. This is essential for optimizing performance, handling user interactions, and managing dependent data flows.
+
+## Using the enabled Option
+
+The `enabled` option controls whether a query should automatically run:
+
+```tsx
+import { useQuery } from '@tanstack/react-query'
+
+function UserProfile({ userId }) {
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ['user', userId],
+    queryFn: () => fetchUser(userId),
+    enabled: !!userId, // Only run when userId is truthy
+  })
+
+  if (!userId) {
+    return <div>Please select a user</div>
+  }
+
+  if (isLoading) return <div>Loading...</div>
+  if (isError) return <div>Error loading user</div>
+
+  return <div>{data.name}</div>
+}
+```
+
+<Note>
+  When `enabled` is `false`, the query will stay in an `idle` status and won't execute until `enabled` becomes `true`.
+</Note>
+
+## Lazy Queries
+
+Implement lazy loading by starting with `enabled: false` and manually triggering the query:
+
+```tsx
+function SearchUsers() {
+  const [searchTerm, setSearchTerm] = useState('')
+  const [shouldSearch, setShouldSearch] = useState(false)
+
+  const { data, refetch, isFetching } = useQuery({
+    queryKey: ['users', searchTerm],
+    queryFn: () => searchUsers(searchTerm),
+    enabled: false, // Don't run automatically
+  })
+
+  const handleSearch = () => {
+    setShouldSearch(true)
+    refetch()
+  }
+
+  return (
+    <div>
+      <input
+        value={searchTerm}
+        onChange={(e) => setSearchTerm(e.target.value)}
+        placeholder="Search users..."
+      />
+      <button onClick={handleSearch} disabled={!searchTerm}>
+        Search
+      </button>
+      {isFetching && <div>Searching...</div>}
+      {data && <UserList users={data} />}
+    </div>
+  )
+}
+```
+
+<Steps>
+  <Step title="Set enabled to false">
+    Prevent the query from running automatically on mount.
+  </Step>
+
+  <Step title="Trigger with refetch">
+    Call `refetch()` manually when you want to execute the query.
+  </Step>
+
+  <Step title="Handle loading states">
+    Use `isFetching` to show loading indicators during manual fetches.
+  </Step>
+</Steps>
+
+## Conditional Query Execution
+
+Enable queries based on complex conditions:
+
+```tsx
+function Dashboard({ user }) {
+  const hasPermission = user?.role === 'admin' || user?.role === 'manager'
+  const isActive = user?.status === 'active'
+
+  const { data: analyticsData } = useQuery({
+    queryKey: ['analytics'],
+    queryFn: fetchAnalytics,
+    enabled: hasPermission && isActive,
+  })
+
+  if (!hasPermission || !isActive) {
+    return <div>Access denied</div>
+  }
+
+  return <AnalyticsDashboard data={analyticsData} />
+}
+```
+
+<Tip>
+  Combine multiple conditions in the `enabled` option to ensure all prerequisites are met before executing a query.
+</Tip>
+
+## Function-Based enabled
+
+Use a function for dynamic enable logic:
+
+```tsx
+const { data } = useQuery({
+  queryKey: ['user', userId],
+  queryFn: () => fetchUser(userId),
+  enabled: (query) => {
+    // Access the query instance
+    const hasError = query.state.error !== null
+    const isStale = query.isStale()
+    
+    // Only enable if no error and user ID exists
+    return !hasError && !!userId
+  },
+})
+```
+
+## User-Triggered Queries
+
+Fetch data only when the user explicitly requests it:
+
+```tsx
+function EmailPreview({ emailId }) {
+  const [showPreview, setShowPreview] = useState(false)
+
+  const { data, isFetching } = useQuery({
+    queryKey: ['email', emailId],
+    queryFn: () => fetchEmail(emailId),
+    enabled: showPreview && !!emailId,
+  })
+
+  return (
+    <div>
+      <button onClick={() => setShowPreview(true)}>
+        Preview Email
+      </button>
+      {showPreview && (
+        <div>
+          {isFetching ? (
+            <div>Loading preview...</div>
+          ) : (
+            <EmailContent data={data} />
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+```
+
+<Note>
+  This pattern is useful for expensive queries or data that's not needed immediately, reducing unnecessary API calls and improving initial load performance.
+</Note>
+
+## Tab-Based Query Activation
+
+Load data only for the active tab:
+
+```tsx
+function UserTabs({ userId }) {
+  const [activeTab, setActiveTab] = useState('profile')
+
+  const { data: profile } = useQuery({
+    queryKey: ['profile', userId],
+    queryFn: () => fetchUserProfile(userId),
+    enabled: activeTab === 'profile',
+  })
+
+  const { data: activity } = useQuery({
+    queryKey: ['activity', userId],
+    queryFn: () => fetchUserActivity(userId),
+    enabled: activeTab === 'activity',
+  })
+
+  const { data: settings } = useQuery({
+    queryKey: ['settings', userId],
+    queryFn: () => fetchUserSettings(userId),
+    enabled: activeTab === 'settings',
+  })
+
+  return (
+    <div>
+      <div>
+        <button onClick={() => setActiveTab('profile')}>Profile</button>
+        <button onClick={() => setActiveTab('activity')}>Activity</button>
+        <button onClick={() => setActiveTab('settings')}>Settings</button>
+      </div>
+      <div>
+        {activeTab === 'profile' && <ProfileTab data={profile} />}
+        {activeTab === 'activity' && <ActivityTab data={activity} />}
+        {activeTab === 'settings' && <SettingsTab data={settings} />}
+      </div>
+    </div>
+  )
+}
+```
+
+<Warning>
+  If you want to cache data across tab switches, set `enabled: true` and use `staleTime` instead. Disabled queries won't fetch data even if it's stale.
+</Warning>
+
+## Permanently Disabled Queries
+
+Some queries should never run automatically:
+
+```tsx
+function ExportData() {
+  const { refetch, isFetching } = useQuery({
+    queryKey: ['export'],
+    queryFn: generateExport,
+    enabled: false, // Never run automatically
+    gcTime: 0, // Don't cache the result
+  })
+
+  const handleExport = async () => {
+    const { data } = await refetch()
+    downloadFile(data)
+  }
+
+  return (
+    <button onClick={handleExport} disabled={isFetching}>
+      {isFetching ? 'Generating...' : 'Export Data'}
+    </button>
+  )
+}
+```
+
+## Disabling During Mutations
+
+Disable queries while mutations are in progress:
+
+```tsx
+function EditablePost({ postId }) {
+  const [isEditing, setIsEditing] = useState(false)
+
+  const { data: post } = useQuery({
+    queryKey: ['post', postId],
+    queryFn: () => fetchPost(postId),
+    enabled: !isEditing, // Don't refetch while editing
+  })
+
+  const updatePost = useMutation({
+    mutationFn: (updates) => updatePostAPI(postId, updates),
+    onSuccess: () => {
+      setIsEditing(false)
+      queryClient.invalidateQueries({ queryKey: ['post', postId] })
+    },
+  })
+
+  return (
+    <div>
+      {isEditing ? (
+        <PostEditor
+          initialData={post}
+          onSave={(data) => updatePost.mutate(data)}
+          onCancel={() => setIsEditing(false)}
+        />
+      ) : (
+        <PostDisplay
+          data={post}
+          onEdit={() => setIsEditing(true)}
+        />
+      )}
+    </div>
+  )
+}
+```
+
+<Tip>
+  Disabling queries during editing prevents race conditions where background refetches could overwrite user changes.
+</Tip>
+
+## Query Status with Disabled
+
+Understand how query status works with `enabled: false`:
+
+```tsx
+const { status, fetchStatus, data } = useQuery({
+  queryKey: ['user', userId],
+  queryFn: () => fetchUser(userId),
+  enabled: !!userId,
+})
+
+// When enabled is false:
+// - status: 'pending' (no data yet) or 'success' (has cached data)
+// - fetchStatus: 'idle' (not fetching)
+// - data: undefined or previous cached data
+
+if (fetchStatus === 'idle' && status === 'pending') {
+  return <div>Waiting to fetch...</div>
+}
+```
+
+<Note>
+  A disabled query can have `status: 'success'` if it has cached data from a previous fetch, but `fetchStatus` will be `'idle'` indicating it's not currently fetching.
+</Note>
+
+## Re-enabling Queries
+
+Queries automatically run when `enabled` changes from `false` to `true`:
+
+```tsx
+function ConditionalData({ shouldLoad }) {
+  const { data, isFetching } = useQuery({
+    queryKey: ['data'],
+    queryFn: fetchData,
+    enabled: shouldLoad, // Automatically fetches when this becomes true
+  })
+
+  return (
+    <div>
+      {isFetching && <div>Loading...</div>}
+      {data && <DataDisplay data={data} />}
+    </div>
+  )
+}
+```
+
+## Refetch with enabled: false
+
+You can manually refetch even when `enabled` is `false`:
+
+```tsx
+const { data, refetch } = useQuery({
+  queryKey: ['data'],
+  queryFn: fetchData,
+  enabled: false,
+})
+
+// This works even though enabled is false
+const handleManualRefetch = () => {
+  refetch()
+}
+```
+
+<Tip>
+  Use `refetch()` for one-time manual fetches and `enabled` for controlling automatic fetching behavior (on mount, window focus, network reconnect, etc.).
+</Tip>
+
+## Combining with Other Options
+
+Disabled queries work alongside other query options:
+
+```tsx
+const { data } = useQuery({
+  queryKey: ['user', userId],
+  queryFn: () => fetchUser(userId),
+  enabled: !!userId,
+  staleTime: 5000, // Still applies when query is enabled
+  retry: 3, // Still applies to failed fetches
+  refetchOnWindowFocus: false, // Prevents refetch on focus
+})
+```
+
+## Debugging Disabled Queries
+
+Use the devtools to inspect disabled queries:
+
+```tsx
+import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
+
+function App() {
+  return (
+    <>
+      <YourApp />
+      <ReactQueryDevtools initialIsOpen={false} />
+    </>
+  )
+}
+```
+
+<Note>
+  In the devtools, disabled queries show with a "disabled" badge, helping you identify why a query isn't fetching.
+</Note>

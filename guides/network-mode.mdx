@@ -1,0 +1,474 @@
+---
+title: Network Mode
+description: Configuring how TanStack Query handles online and offline states
+---
+
+Network Mode controls how TanStack Query behaves when the device is online or offline. This is crucial for building applications that work in unreliable network conditions.
+
+## Network Modes
+
+TanStack Query supports three network modes:
+
+<Tabs>
+  <Tab title="online">
+    Queries and mutations only run when the device is online.
+    ```tsx
+    useQuery({
+      queryKey: ['todos'],
+      queryFn: fetchTodos,
+      networkMode: 'online', // Default
+    })
+    ```
+    **Behavior:**
+    - Pauses queries when offline
+    - Resumes automatically when back online
+    - Shows `fetchStatus: 'paused'` while offline
+  </Tab>
+  <Tab title="always">
+    Queries and mutations run regardless of network state.
+    ```tsx
+    useQuery({
+      queryKey: ['todos'],
+      queryFn: fetchTodos,
+      networkMode: 'always',
+    })
+    ```
+    **Behavior:**
+    - Queries run even when offline
+    - Useful for local-first applications
+    - No automatic pausing
+  </Tab>
+  <Tab title="offlineFirst">
+    Runs query once, then pauses if it fails and device is offline.
+    ```tsx
+    useQuery({
+      queryKey: ['todos'],
+      queryFn: fetchTodos,
+      networkMode: 'offlineFirst',
+    })
+    ```
+    **Behavior:**
+    - Attempts to fetch once
+    - Pauses retries if offline and request failed
+    - Resumes retries when back online
+  </Tab>
+</Tabs>
+
+## Default Network Mode
+
+The default network mode is `'online'`:
+
+```tsx
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      networkMode: 'online',
+    },
+    mutations: {
+      networkMode: 'online',
+    },
+  },
+})
+```
+
+## Online/Offline Detection
+
+TanStack Query uses the `OnlineManager` to detect network state:
+
+```tsx
+import { onlineManager } from '@tanstack/react-query'
+
+// Check if online
+const isOnline = onlineManager.isOnline()
+
+// Listen to online/offline events
+const unsubscribe = onlineManager.subscribe((isOnline) => {
+  console.log('Network status:', isOnline ? 'online' : 'offline')
+})
+```
+
+<Note>
+By default, TanStack Query uses `window.addEventListener('online')` and `window.addEventListener('offline')` for detection.
+</Note>
+
+## Custom Online Detection
+
+Override the default online detection:
+
+```tsx
+import { onlineManager } from '@tanstack/react-query'
+
+// Custom online check
+onlineManager.setEventListener((setOnline) => {
+  // Use your own logic
+  return window.addEventListener('myCustomOnlineEvent', () => {
+    setOnline(true)
+  })
+})
+
+// Always online (useful for React Native)
+onlineManager.setOnline(true)
+
+// Custom async check
+async function checkOnlineStatus() {
+  try {
+    await fetch('/api/health', { method: 'HEAD' })
+    return true
+  } catch {
+    return false
+  }
+}
+
+setInterval(async () => {
+  const online = await checkOnlineStatus()
+  onlineManager.setOnline(online)
+}, 5000)
+```
+
+## Network Mode with Queries
+
+### Online Mode (Default)
+
+```tsx
+function Todos() {
+  const { data, fetchStatus } = useQuery({
+    queryKey: ['todos'],
+    queryFn: fetchTodos,
+    networkMode: 'online',
+  })
+
+  // When offline: fetchStatus === 'paused'
+  // When online: fetchStatus === 'fetching' or 'idle'
+
+  if (fetchStatus === 'paused') {
+    return <div>No internet connection. Waiting to reconnect...</div>
+  }
+}
+```
+
+### Always Mode
+
+```tsx
+function Todos() {
+  const { data } = useQuery({
+    queryKey: ['todos'],
+    queryFn: async () => {
+      // This will run even when offline
+      // Useful for IndexedDB or local storage queries
+      return await db.todos.toArray()
+    },
+    networkMode: 'always',
+  })
+}
+```
+
+### Offline First Mode
+
+```tsx
+function Todos() {
+  const { data } = useQuery({
+    queryKey: ['todos'],
+    queryFn: fetchTodos,
+    networkMode: 'offlineFirst',
+  })
+
+  // Tries to fetch once
+  // If it fails and device is offline, pauses retries
+  // Resumes when back online
+}
+```
+
+## Network Mode with Mutations
+
+Mutations also respect network mode:
+
+```tsx
+const mutation = useMutation({
+  mutationFn: createTodo,
+  networkMode: 'online',
+})
+
+// When offline:
+// mutation.mutate() will be paused
+// mutation.isPaused === true
+```
+
+## Paused State
+
+When queries are paused, they have a special status:
+
+```tsx
+const { status, fetchStatus, isPaused } = useQuery({
+  queryKey: ['todos'],
+  queryFn: fetchTodos,
+  networkMode: 'online',
+})
+
+// When paused:
+// fetchStatus === 'paused'
+// isPaused === true
+// status === 'pending' (if no cached data)
+// status === 'success' (if cached data exists)
+```
+
+<Warning>
+A query can be `status: 'pending'` but `fetchStatus: 'paused'` when offline with no cached data.
+</Warning>
+
+## Handling Paused Queries
+
+Show appropriate UI when queries are paused:
+
+```tsx
+function Todos() {
+  const { data, status, fetchStatus } = useQuery({
+    queryKey: ['todos'],
+    queryFn: fetchTodos,
+  })
+
+  if (fetchStatus === 'paused') {
+    return (
+      <div>
+        <p>You are offline</p>
+        {status === 'success' && <div>Showing cached data: {data}</div>}
+        {status === 'pending' && <div>Waiting for connection...</div>}
+      </div>
+    )
+  }
+
+  if (status === 'pending') return <div>Loading...</div>
+  if (status === 'error') return <div>Error loading todos</div>
+
+  return <div>{/* Render todos */}</div>
+}
+```
+
+## Resume on Reconnect
+
+Queries automatically resume when the connection is restored:
+
+```tsx
+function Todos() {
+  const { refetch } = useQuery({
+    queryKey: ['todos'],
+    queryFn: fetchTodos,
+    networkMode: 'online',
+  })
+
+  // Paused queries automatically resume when online
+  // No manual intervention needed
+
+  // But you can manually trigger refetch
+  const handleRetry = () => {
+    refetch()
+  }
+}
+```
+
+## Persist Paused Mutations
+
+Paused mutations can be persisted and resumed later:
+
+```tsx
+import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client'
+import { createSyncStoragePersister } from '@tanstack/query-sync-storage-persister'
+
+const persister = createSyncStoragePersister({
+  storage: window.localStorage,
+})
+
+function App() {
+  return (
+    <PersistQueryClientProvider
+      client={queryClient}
+      persistOptions={{ persister }}
+    >
+      {/* Your app */}
+    </PersistQueryClientProvider>
+  )
+}
+
+// Mutations created while offline are persisted
+// They will resume when back online
+```
+
+## React Native Configuration
+
+Configure network detection for React Native:
+
+```tsx
+import NetInfo from '@react-native-community/netinfo'
+import { onlineManager } from '@tanstack/react-query'
+
+onlineManager.setEventListener((setOnline) => {
+  return NetInfo.addEventListener((state) => {
+    setOnline(!!state.isConnected)
+  })
+})
+```
+
+## Testing Network Modes
+
+Test offline behavior in your app:
+
+```tsx
+import { onlineManager } from '@tanstack/react-query'
+
+// Simulate offline
+onlineManager.setOnline(false)
+
+// Simulate online
+onlineManager.setOnline(true)
+
+// In tests
+test('shows offline message when network is down', async () => {
+  onlineManager.setOnline(false)
+  
+  render(<Todos />)
+  
+  expect(screen.getByText(/offline/i)).toBeInTheDocument()
+  
+  onlineManager.setOnline(true)
+})
+```
+
+## Focus Manager
+
+TanStack Query also includes a Focus Manager for window focus detection:
+
+```tsx
+import { focusManager } from '@tanstack/react-query'
+
+// Check if window is focused
+const isFocused = focusManager.isFocused()
+
+// Listen to focus events
+const unsubscribe = focusManager.subscribe((isFocused) => {
+  console.log('Window focus:', isFocused)
+})
+
+// Custom focus detection
+focusManager.setEventListener((handleFocus) => {
+  // Custom logic
+  window.addEventListener('focus', () => handleFocus(true))
+  window.addEventListener('blur', () => handleFocus(false))
+
+  return () => {
+    window.removeEventListener('focus', handleFocus)
+    window.removeEventListener('blur', handleFocus)
+  }
+})
+```
+
+## Refetch on Reconnect
+
+Control refetching when coming back online:
+
+```tsx
+useQuery({
+  queryKey: ['todos'],
+  queryFn: fetchTodos,
+  refetchOnReconnect: true, // Default
+  networkMode: 'online',
+})
+
+// Disable refetch on reconnect
+useQuery({
+  queryKey: ['todos'],
+  queryFn: fetchTodos,
+  refetchOnReconnect: false,
+})
+
+// Conditional refetch
+useQuery({
+  queryKey: ['todos'],
+  queryFn: fetchTodos,
+  refetchOnReconnect: (query) => query.state.data == null,
+})
+```
+
+## Best Practices
+
+<Steps>
+  <Step title="Choose the Right Mode">
+    - Use `'online'` for server data (default)
+    - Use `'always'` for local-first apps
+    - Use `'offlineFirst'` for progressive web apps
+  </Step>
+  <Step title="Handle Paused State">
+    Always check `fetchStatus` to show appropriate loading states:
+    ```tsx
+    if (fetchStatus === 'paused') {
+      return <OfflineMessage />
+    }
+    ```
+  </Step>
+  <Step title="Persist Mutations">
+    Use persistence for critical mutations that should survive offline periods.
+  </Step>
+  <Step title="Custom Detection">
+    Implement custom online detection for more reliable connectivity checks.
+  </Step>
+  <Step title="Test Offline Scenarios">
+    Always test your app's behavior in offline mode.
+  </Step>
+</Steps>
+
+## Common Patterns
+
+<Tabs>
+  <Tab title="Local First">
+    ```tsx
+    // Always fetch from local DB
+    const localQuery = useQuery({
+      queryKey: ['todos', 'local'],
+      queryFn: () => db.todos.toArray(),
+      networkMode: 'always',
+    })
+
+    // Sync with server when online
+    const syncQuery = useQuery({
+      queryKey: ['todos', 'sync'],
+      queryFn: fetchTodosFromServer,
+      networkMode: 'online',
+      onSuccess: (data) => {
+        db.todos.bulkPut(data)
+      },
+    })
+    ```
+  </Tab>
+  <Tab title="Progressive Enhancement">
+    ```tsx
+    useQuery({
+      queryKey: ['todos'],
+      queryFn: fetchTodos,
+      networkMode: 'offlineFirst',
+      // Show cached data immediately
+      staleTime: 0,
+      // Keep trying in background
+      retry: true,
+    })
+    ```
+  </Tab>
+  <Tab title="Offline Indicator">
+    ```tsx
+    function OfflineIndicator() {
+      const [isOnline, setIsOnline] = React.useState(
+        onlineManager.isOnline()
+      )
+
+      React.useEffect(() => {
+        return onlineManager.subscribe(setIsOnline)
+      }, [])
+
+      if (isOnline) return null
+
+      return (
+        <div className="offline-banner">
+          You are offline. Some features may be limited.
+        </div>
+      )
+    }
+    ```
+  </Tab>
+</Tabs>

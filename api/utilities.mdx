@@ -1,0 +1,695 @@
+---
+title: Utility Functions
+description: API reference for TanStack Query utility functions and helpers
+---
+
+TanStack Query provides a collection of utility functions for common operations like key matching, data transformation, and query filtering.
+
+## Query and Mutation Matching
+
+### matchQuery
+
+Determines if a query matches the given filters.
+
+```typescript
+function matchQuery(
+  filters: QueryFilters,
+  query: Query<any, any, any, any>,
+): boolean
+```
+
+#### Parameters
+
+<ParamField path="filters" type="QueryFilters" required>
+  The filter criteria to match against.
+
+  <ParamField path="type" type="'all' | 'active' | 'inactive'" default="'all'">
+    Filter queries by their active state.
+  </ParamField>
+
+  <ParamField path="exact" type="boolean">
+    If `true`, the query key must match exactly. If `false`, partial matching is used.
+  </ParamField>
+
+  <ParamField path="queryKey" type="QueryKey">
+    The query key or key prefix to match.
+  </ParamField>
+
+  <ParamField path="stale" type="boolean">
+    Filter queries by their stale state.
+  </ParamField>
+
+  <ParamField path="fetchStatus" type="'fetching' | 'paused' | 'idle'">
+    Filter queries by their fetch status.
+  </ParamField>
+
+  <ParamField path="predicate" type="(query: Query) => boolean">
+    Custom predicate function for advanced filtering.
+  </ParamField>
+</ParamField>
+
+<ParamField path="query" type="Query" required>
+  The query instance to test against the filters.
+</ParamField>
+
+#### Returns
+
+`boolean` - Returns `true` if the query matches all specified filters, `false` otherwise.
+
+### matchMutation
+
+Determines if a mutation matches the given filters.
+
+```typescript
+function matchMutation(
+  filters: MutationFilters,
+  mutation: Mutation<any, any>,
+): boolean
+```
+
+#### Parameters
+
+<ParamField path="filters" type="MutationFilters" required>
+  The filter criteria to match against.
+
+  <ParamField path="exact" type="boolean">
+    If `true`, the mutation key must match exactly. If `false`, partial matching is used.
+  </ParamField>
+
+  <ParamField path="mutationKey" type="MutationKey">
+    The mutation key or key prefix to match.
+  </ParamField>
+
+  <ParamField path="status" type="'idle' | 'pending' | 'success' | 'error'">
+    Filter mutations by their status.
+  </ParamField>
+
+  <ParamField path="predicate" type="(mutation: Mutation) => boolean">
+    Custom predicate function for advanced filtering.
+  </ParamField>
+</ParamField>
+
+<ParamField path="mutation" type="Mutation" required>
+  The mutation instance to test against the filters.
+</ParamField>
+
+#### Returns
+
+`boolean` - Returns `true` if the mutation matches all specified filters, `false` otherwise.
+
+---
+
+## Key Hashing and Matching
+
+### hashKey
+
+Generates a stable hash from a query or mutation key.
+
+```typescript
+function hashKey(queryKey: QueryKey | MutationKey): string
+```
+
+#### Parameters
+
+<ParamField path="queryKey" type="QueryKey | MutationKey" required>
+  The key to hash. Can be any serializable array.
+</ParamField>
+
+#### Returns
+
+`string` - A stable JSON string representation of the key with object keys sorted.
+
+#### Example
+
+```typescript
+import { hashKey } from '@tanstack/react-query'
+
+const hash1 = hashKey(['posts', { userId: 1, sort: 'desc' }])
+const hash2 = hashKey(['posts', { sort: 'desc', userId: 1 }])
+
+// Both produce the same hash due to key sorting
+console.log(hash1 === hash2) // true
+```
+
+<Note>
+  Object properties in the key are sorted alphabetically to ensure consistent hashing regardless of property order.
+</Note>
+
+### hashQueryKeyByOptions
+
+Generates a query key hash using options-specific hash function if provided.
+
+```typescript
+function hashQueryKeyByOptions<TQueryKey extends QueryKey = QueryKey>(
+  queryKey: TQueryKey,
+  options?: Pick<QueryOptions<any, any, any, any>, 'queryKeyHashFn'>,
+): string
+```
+
+#### Parameters
+
+<ParamField path="queryKey" type="QueryKey" required>
+  The query key to hash.
+</ParamField>
+
+<ParamField path="options" type="Pick<QueryOptions, 'queryKeyHashFn'>">
+  Optional query options containing a custom hash function.
+</ParamField>
+
+#### Returns
+
+`string` - The hashed query key using the custom hash function if provided, or the default `hashKey` function.
+
+### partialMatchKey
+
+Checks if key `b` partially matches with key `a`.
+
+```typescript
+function partialMatchKey(a: QueryKey, b: QueryKey): boolean
+```
+
+#### Parameters
+
+<ParamField path="a" type="QueryKey" required>
+  The full key to match against.
+</ParamField>
+
+<ParamField path="b" type="QueryKey" required>
+  The partial key or key prefix to check.
+</ParamField>
+
+#### Returns
+
+`boolean` - Returns `true` if `b` is a partial match of `a`.
+
+#### Example
+
+```typescript
+import { partialMatchKey } from '@tanstack/react-query'
+
+partialMatchKey(
+  ['posts', { userId: 1, status: 'published' }],
+  ['posts', { userId: 1 }]
+) // true
+
+partialMatchKey(
+  ['posts', { userId: 1 }],
+  ['posts', { userId: 2 }]
+) // false
+```
+
+---
+
+## Data Transformation
+
+### replaceEqualDeep
+
+Performs deep equality checking and structural sharing between two values.
+
+```typescript
+function replaceEqualDeep<T>(a: unknown, b: T, depth?: number): T
+```
+
+#### Parameters
+
+<ParamField path="a" type="unknown" required>
+  The previous value to compare against.
+</ParamField>
+
+<ParamField path="b" type="T" required>
+  The new value to compare and potentially share structure with.
+</ParamField>
+
+<ParamField path="depth" type="number" default="0">
+  The current recursion depth. Stops recursion at depth 500 to prevent stack overflow.
+</ParamField>
+
+#### Returns
+
+`T` - Returns `a` if `b` is deeply equal, otherwise returns a new object/array with shared references for equal children.
+
+#### Example
+
+```typescript
+import { replaceEqualDeep } from '@tanstack/react-query'
+
+const oldData = { user: { id: 1, name: 'John' }, posts: [1, 2, 3] }
+const newData = { user: { id: 1, name: 'John' }, posts: [1, 2, 3] }
+
+const result = replaceEqualDeep(oldData, newData)
+
+// result.user === oldData.user (same reference)
+// result.posts === oldData.posts (same reference)
+```
+
+<Note>
+  This function is used internally by TanStack Query for structural sharing, which helps prevent unnecessary re-renders by maintaining referential equality for unchanged data.
+</Note>
+
+### replaceData
+
+Replaces query data with structural sharing based on options.
+
+```typescript
+function replaceData<
+  TData,
+  TOptions extends QueryOptions<any, any, any, any>,
+>(
+  prevData: TData | undefined,
+  data: TData,
+  options: TOptions,
+): TData
+```
+
+#### Parameters
+
+<ParamField path="prevData" type="TData | undefined" required>
+  The previous data value.
+</ParamField>
+
+<ParamField path="data" type="TData" required>
+  The new data value.
+</ParamField>
+
+<ParamField path="options" type="QueryOptions" required>
+  Query options containing `structuralSharing` configuration.
+</ParamField>
+
+#### Returns
+
+`TData` - The new data, potentially with structural sharing applied.
+
+### keepPreviousData
+
+Utility function that returns the previous data unchanged.
+
+```typescript
+function keepPreviousData<T>(previousData: T | undefined): T | undefined
+```
+
+#### Parameters
+
+<ParamField path="previousData" type="T | undefined" required>
+  The previous data value.
+</ParamField>
+
+#### Returns
+
+`T | undefined` - The same previous data value passed in.
+
+#### Example
+
+```typescript
+import { keepPreviousData } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
+
+function Component({ page }) {
+  const { data } = useQuery({
+    queryKey: ['posts', page],
+    queryFn: () => fetchPosts(page),
+    placeholderData: keepPreviousData,
+  })
+  
+  // Previous page data is shown while new page loads
+}
+```
+
+---
+
+## Object Comparison
+
+### shallowEqualObjects
+
+Performs shallow equality comparison between two objects.
+
+```typescript
+function shallowEqualObjects<T extends Record<string, any>>(
+  a: T,
+  b: T | undefined,
+): boolean
+```
+
+#### Parameters
+
+<ParamField path="a" type="Record<string, any>" required>
+  The first object to compare.
+</ParamField>
+
+<ParamField path="b" type="Record<string, any> | undefined" required>
+  The second object to compare.
+</ParamField>
+
+#### Returns
+
+`boolean` - Returns `true` if objects have the same keys and values (using `===` comparison), `false` otherwise.
+
+---
+
+## Type Guards
+
+### isPlainArray
+
+Checks if a value is a plain array.
+
+```typescript
+function isPlainArray(value: unknown): value is Array<unknown>
+```
+
+#### Returns
+
+`boolean` - Returns `true` if the value is an array with only numeric indices.
+
+### isPlainObject
+
+Checks if a value is a plain JavaScript object.
+
+```typescript
+function isPlainObject(o: any): o is Record<PropertyKey, unknown>
+```
+
+#### Returns
+
+`boolean` - Returns `true` if the value is a plain object created by `{}` or `new Object()`, `false` for class instances, arrays, null, etc.
+
+### isValidTimeout
+
+Checks if a value is a valid timeout duration.
+
+```typescript
+function isValidTimeout(value: unknown): value is number
+```
+
+#### Returns
+
+`boolean` - Returns `true` if the value is a number >= 0 and not `Infinity`.
+
+---
+
+## Time Utilities
+
+### timeUntilStale
+
+Calculates the time in milliseconds until data becomes stale.
+
+```typescript
+function timeUntilStale(updatedAt: number, staleTime?: number): number
+```
+
+#### Parameters
+
+<ParamField path="updatedAt" type="number" required>
+  The timestamp when the data was last updated (in milliseconds).
+</ParamField>
+
+<ParamField path="staleTime" type="number">
+  The stale time duration in milliseconds.
+</ParamField>
+
+#### Returns
+
+`number` - The number of milliseconds until the data becomes stale, or `0` if already stale.
+
+### resolveStaleTime
+
+Resolves a stale time value, handling both static values and functions.
+
+```typescript
+function resolveStaleTime<
+  TQueryFnData = unknown,
+  TError = DefaultError,
+  TData = TQueryFnData,
+  TQueryKey extends QueryKey = QueryKey,
+>(
+  staleTime:
+    | undefined
+    | StaleTimeFunction<TQueryFnData, TError, TData, TQueryKey>,
+  query: Query<TQueryFnData, TError, TData, TQueryKey>,
+): StaleTime | undefined
+```
+
+#### Returns
+
+`number | 'static' | undefined` - The resolved stale time value.
+
+### resolveEnabled
+
+Resolves an enabled value, handling both static values and functions.
+
+```typescript
+function resolveEnabled<
+  TQueryFnData = unknown,
+  TError = DefaultError,
+  TData = TQueryFnData,
+  TQueryKey extends QueryKey = QueryKey,
+>(
+  enabled: undefined | Enabled<TQueryFnData, TError, TData, TQueryKey>,
+  query: Query<TQueryFnData, TError, TData, TQueryKey>,
+): boolean | undefined
+```
+
+#### Returns
+
+`boolean | undefined` - The resolved enabled value.
+
+### sleep
+
+Creates a promise that resolves after a specified timeout.
+
+```typescript
+function sleep(timeout: number): Promise<void>
+```
+
+#### Parameters
+
+<ParamField path="timeout" type="number" required>
+  The timeout duration in milliseconds.
+</ParamField>
+
+#### Returns
+
+`Promise<void>` - A promise that resolves after the specified timeout.
+
+---
+
+## Array Utilities
+
+### addToEnd
+
+Adds an item to the end of an array with optional maximum length.
+
+```typescript
+function addToEnd<T>(items: Array<T>, item: T, max = 0): Array<T>
+```
+
+#### Parameters
+
+<ParamField path="items" type="Array<T>" required>
+  The source array.
+</ParamField>
+
+<ParamField path="item" type="T" required>
+  The item to add.
+</ParamField>
+
+<ParamField path="max" type="number" default="0">
+  Maximum array length. If exceeded, items are removed from the start. Use `0` for no limit.
+</ParamField>
+
+#### Returns
+
+`Array<T>` - A new array with the item added to the end.
+
+### addToStart
+
+Adds an item to the start of an array with optional maximum length.
+
+```typescript
+function addToStart<T>(items: Array<T>, item: T, max = 0): Array<T>
+```
+
+#### Parameters
+
+<ParamField path="items" type="Array<T>" required>
+  The source array.
+</ParamField>
+
+<ParamField path="item" type="T" required>
+  The item to add.
+</ParamField>
+
+<ParamField path="max" type="number" default="0">
+  Maximum array length. If exceeded, items are removed from the end. Use `0` for no limit.
+</ParamField>
+
+#### Returns
+
+`Array<T>` - A new array with the item added to the start.
+
+---
+
+## Functional Utilities
+
+### functionalUpdate
+
+Applies an updater that can be either a value or a function.
+
+```typescript
+function functionalUpdate<TInput, TOutput>(
+  updater: Updater<TInput, TOutput>,
+  input: TInput,
+): TOutput
+```
+
+#### Parameters
+
+<ParamField path="updater" type="TOutput | ((input: TInput) => TOutput)" required>
+  Either a direct value or a function that takes the input and returns the output.
+</ParamField>
+
+<ParamField path="input" type="TInput" required>
+  The input value to pass to the updater function.
+</ParamField>
+
+#### Returns
+
+`TOutput` - If updater is a function, returns the result of calling it with input. Otherwise, returns updater directly.
+
+### noop
+
+A no-operation function that does nothing.
+
+```typescript
+function noop(): void
+```
+
+#### Example
+
+```typescript
+import { noop } from '@tanstack/react-query'
+
+// Useful for avoiding unhandled promise rejections
+promise.catch(noop)
+```
+
+### ensureQueryFn
+
+Ensures a valid query function exists or returns an appropriate fallback.
+
+```typescript
+function ensureQueryFn<
+  TQueryFnData = unknown,
+  TQueryKey extends QueryKey = QueryKey,
+>(
+  options: {
+    queryFn?: QueryFunction<TQueryFnData, TQueryKey> | SkipToken
+    queryHash?: string
+  },
+  fetchOptions?: FetchOptions<TQueryFnData>,
+): QueryFunction<TQueryFnData, TQueryKey>
+```
+
+#### Returns
+
+`QueryFunction` - A valid query function, or a function that returns a rejected promise if no valid function is available.
+
+### shouldThrowError
+
+Determines if an error should be thrown based on configuration.
+
+```typescript
+function shouldThrowError<T extends (...args: Array<any>) => boolean>(
+  throwOnError: boolean | T | undefined,
+  params: Parameters<T>,
+): boolean
+```
+
+#### Parameters
+
+<ParamField path="throwOnError" type="boolean | Function | undefined" required>
+  Can be a boolean, a function, or undefined.
+</ParamField>
+
+<ParamField path="params" type="Array<any>" required>
+  Parameters to pass to the function if `throwOnError` is a function.
+</ParamField>
+
+#### Returns
+
+`boolean` - Returns `true` if errors should be thrown.
+
+---
+
+## Constants
+
+### skipToken
+
+A special symbol used to skip query execution.
+
+```typescript
+const skipToken: unique symbol
+type SkipToken = typeof skipToken
+```
+
+#### Example
+
+```typescript
+import { useQuery, skipToken } from '@tanstack/react-query'
+
+function Component({ userId }: { userId?: string }) {
+  const { data } = useQuery({
+    queryKey: ['user', userId],
+    queryFn: userId ? () => fetchUser(userId) : skipToken,
+  })
+  
+  // Query is skipped when userId is undefined
+}
+```
+
+### isServer
+
+Boolean indicating if the code is running in a server environment.
+
+```typescript
+const isServer: boolean
+```
+
+Returns `true` if `window` is undefined or Deno is detected in global scope.
+
+---
+
+## TypeScript Types
+
+### QueryFilters
+
+```typescript
+interface QueryFilters<TQueryKey extends QueryKey = QueryKey> {
+  type?: 'all' | 'active' | 'inactive'
+  exact?: boolean
+  predicate?: (query: Query) => boolean
+  queryKey?: TQueryKey
+  stale?: boolean
+  fetchStatus?: 'fetching' | 'paused' | 'idle'
+}
+```
+
+### MutationFilters
+
+```typescript
+interface MutationFilters<
+  TData = unknown,
+  TError = DefaultError,
+  TVariables = unknown,
+  TOnMutateResult = unknown,
+> {
+  exact?: boolean
+  predicate?: (mutation: Mutation<TData, TError, TVariables, TOnMutateResult>) => boolean
+  mutationKey?: MutationKey
+  status?: 'idle' | 'pending' | 'success' | 'error'
+}
+```
+
+### Updater
+
+```typescript
+type Updater<TInput, TOutput> = TOutput | ((input: TInput) => TOutput)
+```

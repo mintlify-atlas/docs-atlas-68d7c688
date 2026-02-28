@@ -1,0 +1,324 @@
+---
+title: useQueries
+description: API reference for the useQueries hook
+---
+
+The `useQueries` hook allows you to fetch multiple queries in parallel with a dynamic number of queries. It's useful when you need to fetch an array of queries where the length is not known at build time.
+
+## Import
+
+```typescript
+import { useQueries } from '@tanstack/react-query'
+```
+
+## Signature
+
+```typescript
+function useQueries<T extends Array<any>, TCombinedResult = QueriesResults<T>>({
+  queries,
+  combine,
+}: {
+  queries: readonly [...QueriesOptions<T>]
+  combine?: (result: QueriesResults<T>) => TCombinedResult
+  subscribed?: boolean
+}, queryClient?: QueryClient): TCombinedResult
+```
+
+## Parameters
+
+<ParamField path="options" type="object" required>
+  The queries options object.
+
+  <Expandable title="properties">
+    <ParamField path="queries" type="readonly UseQueryOptions[]" required>
+      An array of query option objects. Each element has the same options as `useQuery`.
+      
+      ```typescript
+      queries: [
+        { queryKey: ['todo', 1], queryFn: () => fetchTodo(1) },
+        { queryKey: ['todo', 2], queryFn: () => fetchTodo(2) },
+      ]
+      ```
+    </ParamField>
+
+    <ParamField path="combine" type="(result: UseQueryResult[]) => TCombinedResult">
+      Optional function to combine or transform the results array.
+      
+      ```typescript
+      combine: (results) => ({
+        data: results.map(r => r.data),
+        pending: results.some(r => r.isPending),
+      })
+      ```
+    </ParamField>
+
+    <ParamField path="subscribed" type="boolean" default="true">
+      Set to `false` to unsubscribe this observer from updates to the query cache.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="queryClient" type="QueryClient">
+  Override the default QueryClient.
+</ParamField>
+
+## Query Options
+
+Each query in the `queries` array accepts the following options:
+
+<ParamField path="queryKey" type="QueryKey" required>
+  The unique key for the query.
+</ParamField>
+
+<ParamField path="queryFn" type="QueryFunction<TQueryFnData, TQueryKey>" required>
+  The function to fetch the data.
+</ParamField>
+
+<ParamField path="enabled" type="boolean" default="true">
+  Set to `false` to disable the query.
+</ParamField>
+
+<ParamField path="staleTime" type="number | 'static'" default="0">
+  Time in milliseconds after data is considered stale.
+</ParamField>
+
+<ParamField path="gcTime" type="number" default="300000">
+  Garbage collection time in milliseconds.
+</ParamField>
+
+<ParamField path="retry" type="boolean | number | ((failureCount: number, error: TError) => boolean)" default="3">
+  Retry configuration.
+</ParamField>
+
+<ParamField path="select" type="(data: TQueryData) => TData">
+  Transform or select part of the data.
+</ParamField>
+
+<Note>
+  All options available to `useQuery` are also available for each query in the array, except `placeholderData` which has a slightly different signature.
+</Note>
+
+## Returns
+
+<ResponseField name="UseQueryResult[]" type="array">
+  By default, returns an array of query results. Each element corresponds to a query in the input array.
+
+  <Expandable title="array elements">
+    <ResponseField name="data" type="TData | undefined">
+      The data for this query.
+    </ResponseField>
+
+    <ResponseField name="error" type="TError | null">
+      The error for this query.
+    </ResponseField>
+
+    <ResponseField name="status" type="'pending' | 'error' | 'success'">
+      The status of this query.
+    </ResponseField>
+
+    <ResponseField name="isPending" type="boolean">
+      Whether this query is pending.
+    </ResponseField>
+
+    <ResponseField name="isLoading" type="boolean">
+      Whether this query is loading.
+    </ResponseField>
+
+    <ResponseField name="isFetching" type="boolean">
+      Whether this query is fetching.
+    </ResponseField>
+
+    <ResponseField name="isSuccess" type="boolean">
+      Whether this query succeeded.
+    </ResponseField>
+
+    <ResponseField name="isError" type="boolean">
+      Whether this query errored.
+    </ResponseField>
+
+    <ResponseField name="refetch" type="() => Promise<UseQueryResult>">
+      Function to refetch this query.
+    </ResponseField>
+  </Expandable>
+
+  When using the `combine` option, returns the result of the combine function.
+</ResponseField>
+
+## Examples
+
+### Basic Usage
+
+```typescript
+import { useQueries } from '@tanstack/react-query'
+
+function TodosComponent({ todoIds }: { todoIds: number[] }) {
+  const results = useQueries({
+    queries: todoIds.map(id => ({
+      queryKey: ['todo', id],
+      queryFn: () => fetchTodo(id),
+      staleTime: 5000,
+    })),
+  })
+
+  return (
+    <div>
+      {results.map((result, index) => (
+        <div key={todoIds[index]}>
+          {result.isLoading && <div>Loading...</div>}
+          {result.isError && <div>Error: {result.error.message}</div>}
+          {result.isSuccess && <div>{result.data.title}</div>}
+        </div>
+      ))}
+    </div>
+  )
+}
+```
+
+### With Type Safety
+
+```typescript
+interface Todo {
+  id: number
+  title: string
+  completed: boolean
+}
+
+const todoIds = [1, 2, 3]
+
+const results = useQueries({
+  queries: todoIds.map(id => ({
+    queryKey: ['todo', id] as const,
+    queryFn: async (): Promise<Todo> => {
+      const response = await fetch(`/api/todos/${id}`)
+      return response.json()
+    },
+  })),
+})
+
+// results is typed as UseQueryResult<Todo, Error>[]
+```
+
+### Using Combine
+
+```typescript
+const combinedResult = useQueries({
+  queries: todoIds.map(id => ({
+    queryKey: ['todo', id],
+    queryFn: () => fetchTodo(id),
+  })),
+  combine: (results) => {
+    return {
+      data: results.map(result => result.data),
+      isPending: results.some(result => result.isPending),
+      isError: results.some(result => result.isError),
+    }
+  },
+})
+
+// combinedResult.data is (Todo | undefined)[]
+// combinedResult.isPending is boolean
+// combinedResult.isError is boolean
+```
+
+### Dynamic Queries with Conditional Execution
+
+```typescript
+const results = useQueries({
+  queries: userIds.map(userId => ({
+    queryKey: ['user', userId],
+    queryFn: () => fetchUser(userId),
+    enabled: !!userId, // Only fetch if userId exists
+  })),
+})
+```
+
+### Handling All States
+
+```typescript
+const results = useQueries({
+  queries: todoIds.map(id => ({
+    queryKey: ['todo', id],
+    queryFn: () => fetchTodo(id),
+  })),
+})
+
+const isLoading = results.some(result => result.isLoading)
+const isError = results.some(result => result.isError)
+const errors = results.filter(result => result.isError).map(result => result.error)
+const allData = results.map(result => result.data)
+
+if (isLoading) return <div>Loading todos...</div>
+if (isError) return <div>Some todos failed to load</div>
+
+return (
+  <ul>
+    {allData.map((todo, index) => (
+      <li key={todoIds[index]}>{todo?.title}</li>
+    ))}
+  </ul>
+)
+```
+
+### With Select Transform
+
+```typescript
+const results = useQueries({
+  queries: todoIds.map(id => ({
+    queryKey: ['todo', id],
+    queryFn: () => fetchTodo(id),
+    select: (todo: Todo) => todo.title, // Only select the title
+  })),
+})
+
+// Each result.data is now just the title string
+```
+
+### Combining with Other Data
+
+```typescript
+interface CombinedData {
+  todos: Todo[]
+  completedCount: number
+  pendingCount: number
+  hasErrors: boolean
+}
+
+const combined = useQueries({
+  queries: todoIds.map(id => ({
+    queryKey: ['todo', id],
+    queryFn: () => fetchTodo(id),
+  })),
+  combine: (results): CombinedData => {
+    const todos = results
+      .filter(r => r.data)
+      .map(r => r.data!)
+    
+    return {
+      todos,
+      completedCount: todos.filter(t => t.completed).length,
+      pendingCount: todos.filter(t => !t.completed).length,
+      hasErrors: results.some(r => r.isError),
+    }
+  },
+})
+
+// combined.todos, combined.completedCount, etc.
+```
+
+## Notes
+
+<Note>
+  The `queries` array must be a stable reference (e.g., use `useMemo` if generating dynamically) or the hook will re-render infinitely.
+</Note>
+
+<Note>
+  Use `useQueries` when the number of queries is dynamic. If you have a fixed number of queries, use multiple `useQuery` calls instead.
+</Note>
+
+<Note>
+  Each query in the array is tracked independently, so you can have different loading states, errors, and data for each query.
+</Note>
+
+<Note>
+  The `combine` option is useful for deriving computed values from multiple queries or reducing the number of re-renders.
+</Note>

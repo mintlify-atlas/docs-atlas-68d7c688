@@ -1,0 +1,748 @@
+---
+title: GraphQL
+description: Use TanStack Query with GraphQL for type-safe data fetching
+---
+
+# GraphQL
+
+TanStack Query works seamlessly with GraphQL, providing powerful caching and state management for your GraphQL operations.
+
+<Note>
+  React Query's fetching mechanisms are built on Promises, making it compatible with any asynchronous data fetching client, including GraphQL.
+</Note>
+
+## Why Use React Query with GraphQL?
+
+While GraphQL clients like Apollo and Relay provide their own caching solutions, React Query offers:
+
+- **Simpler API** - Less boilerplate than traditional GraphQL clients
+- **Framework agnostic** - Works with any GraphQL client (graphql-request, urql, etc.)
+- **Powerful DevTools** - Visual cache inspection and debugging
+- **Automatic refetching** - Built-in window focus, network reconnect, and interval refetching
+- **Optimistic updates** - Easy-to-implement optimistic UI patterns
+
+<Warning>
+  React Query does not support normalized caching. If your application requires normalized cache updates across multiple queries, consider using Apollo Client or Relay instead.
+</Warning>
+
+## Setup with graphql-request
+
+Install the required packages:
+
+```bash
+npm install graphql graphql-request @tanstack/react-query
+```
+
+Create a GraphQL client:
+
+```tsx lib/graphql-client.ts
+import { GraphQLClient } from 'graphql-request'
+
+export const graphqlClient = new GraphQLClient(
+  'https://api.example.com/graphql',
+  {
+    headers: {
+      authorization: 'Bearer YOUR_TOKEN',
+    },
+  }
+)
+```
+
+## Basic Query
+
+Fetch data using GraphQL with React Query:
+
+```tsx
+import { useQuery } from '@tanstack/react-query'
+import { graphql } from './gql/gql'
+import { graphqlClient } from './lib/graphql-client'
+
+const postsQuery = graphql(`
+  query GetPosts {
+    posts {
+      id
+      title
+      author {
+        name
+      }
+    }
+  }
+`)
+
+function Posts() {
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['posts'],
+    queryFn: async () => graphqlClient.request(postsQuery),
+  })
+
+  if (isLoading) return <div>Loading...</div>
+  if (error) return <div>Error: {error.message}</div>
+
+  return (
+    <ul>
+      {data?.posts.map((post) => (
+        <li key={post.id}>
+          <h3>{post.title}</h3>
+          <p>By {post.author.name}</p>
+        </li>
+      ))}
+    </ul>
+  )
+}
+```
+
+## Query with Variables
+
+Pass variables to your GraphQL queries:
+
+```tsx
+import { useQuery } from '@tanstack/react-query'
+import { graphql } from './gql/gql'
+
+const postQuery = graphql(`
+  query GetPost($id: ID!) {
+    post(id: $id) {
+      id
+      title
+      body
+      author {
+        name
+        avatar
+      }
+    }
+  }
+`)
+
+function PostDetails({ postId }: { postId: string }) {
+  const { data } = useQuery({
+    queryKey: ['post', postId],
+    queryFn: async () => 
+      graphqlClient.request(postQuery, { id: postId }),
+  })
+
+  return (
+    <article>
+      <h1>{data?.post.title}</h1>
+      <p>{data?.post.body}</p>
+      <div>
+        <img src={data?.post.author.avatar} alt={data?.post.author.name} />
+        <span>{data?.post.author.name}</span>
+      </div>
+    </article>
+  )
+}
+```
+
+<Tip>
+  Include variables in the query key to ensure React Query refetches when they change.
+</Tip>
+
+## Mutations
+
+Execute GraphQL mutations:
+
+```tsx
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { graphql } from './gql/gql'
+
+const createPostMutation = graphql(`
+  mutation CreatePost($input: CreatePostInput!) {
+    createPost(input: $input) {
+      id
+      title
+      body
+    }
+  }
+`)
+
+function CreatePost() {
+  const queryClient = useQueryClient()
+
+  const mutation = useMutation({
+    mutationFn: async (input: CreatePostInput) =>
+      graphqlClient.request(createPostMutation, { input }),
+    onSuccess: () => {
+      // Invalidate and refetch posts
+      queryClient.invalidateQueries({ queryKey: ['posts'] })
+    },
+  })
+
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    const formData = new FormData(e.currentTarget)
+    mutation.mutate({
+      title: formData.get('title') as string,
+      body: formData.get('body') as string,
+    })
+  }
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <input name="title" placeholder="Title" required />
+      <textarea name="body" placeholder="Body" required />
+      <button type="submit" disabled={mutation.isPending}>
+        {mutation.isPending ? 'Creating...' : 'Create Post'}
+      </button>
+    </form>
+  )
+}
+```
+
+## TypeScript + GraphQL Code Generator
+
+For full type safety, use GraphQL Code Generator:
+
+<Steps>
+  <Step title="Install dependencies">
+    ```bash
+    npm install -D @graphql-codegen/cli @graphql-codegen/client-preset
+    ```
+  </Step>
+
+  <Step title="Create codegen config">
+    ```ts codegen.ts
+    import { CodegenConfig } from '@graphql-codegen/cli'
+
+    const config: CodegenConfig = {
+      schema: 'https://api.example.com/graphql',
+      documents: ['src/**/*.tsx', 'src/**/*.ts'],
+      ignoreNoDocuments: true,
+      generates: {
+        './src/gql/': {
+          preset: 'client',
+          plugins: [],
+        },
+      },
+    }
+
+    export default config
+    ```
+  </Step>
+
+  <Step title="Generate types">
+    Add a script to `package.json`:
+    ```json
+    {
+      "scripts": {
+        "codegen": "graphql-codegen --config codegen.ts"
+      }
+    }
+    ```
+
+    Run the generator:
+    ```bash
+    npm run codegen
+    ```
+  </Step>
+
+  <Step title="Use generated types">
+    ```tsx
+    import { useQuery } from '@tanstack/react-query'
+    import { graphql } from './gql/gql'
+    import { graphqlClient } from './lib/graphql-client'
+
+    const allFilmsQuery = graphql(`
+      query AllFilms($first: Int!) {
+        allFilms(first: $first) {
+          edges {
+            node {
+              id
+              title
+              director
+            }
+          }
+        }
+      }
+    `)
+
+    function Films() {
+      // data is fully typed!
+      const { data } = useQuery({
+        queryKey: ['films'],
+        queryFn: async () =>
+          graphqlClient.request(allFilmsQuery, { first: 10 }),
+      })
+
+      return (
+        <ul>
+          {data?.allFilms.edges.map((edge) => (
+            <li key={edge.node.id}>
+              {edge.node.title} - {edge.node.director}
+            </li>
+          ))}
+        </ul>
+      )
+    }
+    ```
+  </Step>
+</Steps>
+
+<Note>
+  The generated `graphql()` function provides full type inference for queries, mutations, and variables.
+</Note>
+
+## Pagination
+
+Implement cursor-based pagination:
+
+```tsx
+import { useInfiniteQuery } from '@tanstack/react-query'
+import { graphql } from './gql/gql'
+
+const postsQuery = graphql(`
+  query GetPosts($after: String, $first: Int!) {
+    posts(after: $after, first: $first) {
+      edges {
+        node {
+          id
+          title
+        }
+        cursor
+      }
+      pageInfo {
+        hasNextPage
+        endCursor
+      }
+    }
+  }
+`)
+
+function InfinitePosts() {
+  const {
+    data,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery({
+    queryKey: ['posts'],
+    queryFn: async ({ pageParam }) =>
+      graphqlClient.request(postsQuery, {
+        after: pageParam,
+        first: 10,
+      }),
+    initialPageParam: null,
+    getNextPageParam: (lastPage) =>
+      lastPage.posts.pageInfo.hasNextPage
+        ? lastPage.posts.pageInfo.endCursor
+        : undefined,
+  })
+
+  return (
+    <div>
+      {data?.pages.map((page) =>
+        page.posts.edges.map((edge) => (
+          <div key={edge.node.id}>
+            <h3>{edge.node.title}</h3>
+          </div>
+        ))
+      )}
+      {hasNextPage && (
+        <button
+          onClick={() => fetchNextPage()}
+          disabled={isFetchingNextPage}
+        >
+          {isFetchingNextPage ? 'Loading...' : 'Load More'}
+        </button>
+      )}
+    </div>
+  )
+}
+```
+
+## Optimistic Updates
+
+Update the UI immediately for better UX:
+
+```tsx
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { graphql } from './gql/gql'
+
+const updatePostMutation = graphql(`
+  mutation UpdatePost($id: ID!, $input: UpdatePostInput!) {
+    updatePost(id: $id, input: $input) {
+      id
+      title
+      body
+    }
+  }
+`)
+
+function useUpdatePost() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({ id, input }: { id: string; input: any }) =>
+      graphqlClient.request(updatePostMutation, { id, input }),
+    onMutate: async ({ id, input }) => {
+      // Cancel outgoing refetches
+      await queryClient.cancelQueries({ queryKey: ['post', id] })
+
+      // Snapshot the previous value
+      const previousPost = queryClient.getQueryData(['post', id])
+
+      // Optimistically update to the new value
+      queryClient.setQueryData(['post', id], (old: any) => ({
+        post: { ...old.post, ...input },
+      }))
+
+      // Return context with the snapshot
+      return { previousPost }
+    },
+    onError: (err, { id }, context) => {
+      // Rollback to the previous value
+      queryClient.setQueryData(['post', id], context?.previousPost)
+    },
+    onSettled: (data, error, { id }) => {
+      // Refetch after error or success
+      queryClient.invalidateQueries({ queryKey: ['post', id] })
+    },
+  })
+}
+```
+
+## Subscriptions
+
+Handle GraphQL subscriptions:
+
+```tsx
+import { useEffect } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
+import { createClient } from 'graphql-ws'
+
+const wsClient = createClient({
+  url: 'wss://api.example.com/graphql',
+})
+
+function usePostSubscription(postId: string) {
+  const queryClient = useQueryClient()
+
+  useEffect(() => {
+    const unsubscribe = wsClient.subscribe(
+      {
+        query: `
+          subscription OnPostUpdated($id: ID!) {
+            postUpdated(id: $id) {
+              id
+              title
+              body
+            }
+          }
+        `,
+        variables: { id: postId },
+      },
+      {
+        next: (data) => {
+          // Update the query cache
+          queryClient.setQueryData(['post', postId], data)
+        },
+        error: (error) => console.error(error),
+        complete: () => console.log('Subscription complete'),
+      }
+    )
+
+    return () => unsubscribe()
+  }, [postId, queryClient])
+}
+
+function Post({ postId }: { postId: string }) {
+  usePostSubscription(postId)
+
+  const { data } = useQuery({
+    queryKey: ['post', postId],
+    queryFn: () => fetchPost(postId),
+  })
+
+  return <div>{data?.post.title}</div>
+}
+```
+
+<Tip>
+  Combine React Query's caching with GraphQL subscriptions for real-time updates with offline support.
+</Tip>
+
+## Error Handling
+
+Handle GraphQL errors properly:
+
+```tsx
+import { useQuery } from '@tanstack/react-query'
+import { ClientError } from 'graphql-request'
+
+function Posts() {
+  const { data, error } = useQuery({
+    queryKey: ['posts'],
+    queryFn: async () => {
+      try {
+        return await graphqlClient.request(postsQuery)
+      } catch (error) {
+        if (error instanceof ClientError) {
+          // Handle GraphQL errors
+          const gqlError = error.response.errors?.[0]
+          throw new Error(gqlError?.message || 'GraphQL Error')
+        }
+        throw error
+      }
+    },
+  })
+
+  if (error) {
+    return <div>Error: {error.message}</div>
+  }
+
+  return <div>{/* render data */}</div>
+}
+```
+
+## Query Key Factories
+
+Organize GraphQL query keys:
+
+```tsx
+export const queryKeys = {
+  posts: {
+    all: ['posts'] as const,
+    lists: () => [...queryKeys.posts.all, 'list'] as const,
+    list: (filters: any) => [...queryKeys.posts.lists(), filters] as const,
+    details: () => [...queryKeys.posts.all, 'detail'] as const,
+    detail: (id: string) => [...queryKeys.posts.details(), id] as const,
+  },
+  users: {
+    all: ['users'] as const,
+    detail: (id: string) => [...queryKeys.users.all, id] as const,
+  },
+}
+
+// Usage
+function Post({ postId }: { postId: string }) {
+  const { data } = useQuery({
+    queryKey: queryKeys.posts.detail(postId),
+    queryFn: () => fetchPost(postId),
+  })
+
+  return <div>...</div>
+}
+
+// Invalidation
+function InvalidatePost({ postId }: { postId: string }) {
+  const queryClient = useQueryClient()
+  
+  const invalidate = () => {
+    queryClient.invalidateQueries({
+      queryKey: queryKeys.posts.detail(postId),
+    })
+  }
+
+  return <button onClick={invalidate}>Refresh</button>
+}
+```
+
+## Fragment Colocation
+
+Colocate fragments with components:
+
+```tsx
+import { graphql } from './gql/gql'
+
+// Fragment for UserAvatar component
+const UserAvatarFragment = graphql(`
+  fragment UserAvatar on User {
+    id
+    name
+    avatar
+  }
+`)
+
+function UserAvatar({ user }: { user: UserAvatarFragment }) {
+  return (
+    <div>
+      <img src={user.avatar} alt={user.name} />
+      <span>{user.name}</span>
+    </div>
+  )
+}
+
+// Use fragment in query
+const postQuery = graphql(`
+  query GetPost($id: ID!) {
+    post(id: $id) {
+      id
+      title
+      author {
+        ...UserAvatar
+      }
+    }
+  }
+`)
+
+function Post({ postId }: { postId: string }) {
+  const { data } = useQuery({
+    queryKey: ['post', postId],
+    queryFn: () => graphqlClient.request(postQuery, { id: postId }),
+  })
+
+  return (
+    <article>
+      <h1>{data?.post.title}</h1>
+      <UserAvatar user={data?.post.author} />
+    </article>
+  )
+}
+```
+
+## Batching Requests
+
+Batch multiple GraphQL requests:
+
+```tsx
+import { useQueries } from '@tanstack/react-query'
+import { graphql } from './gql/gql'
+
+const userQuery = graphql(`
+  query GetUser($id: ID!) {
+    user(id: $id) {
+      id
+      name
+    }
+  }
+`)
+
+function Users({ userIds }: { userIds: string[] }) {
+  const results = useQueries({
+    queries: userIds.map((id) => ({
+      queryKey: ['user', id],
+      queryFn: () => graphqlClient.request(userQuery, { id }),
+    })),
+  })
+
+  const isLoading = results.some((r) => r.isLoading)
+  const users = results.map((r) => r.data?.user).filter(Boolean)
+
+  if (isLoading) return <div>Loading...</div>
+
+  return (
+    <ul>
+      {users.map((user) => (
+        <li key={user.id}>{user.name}</li>
+      ))}
+    </ul>
+  )
+}
+```
+
+## Server-Side Rendering
+
+Prefetch GraphQL queries for SSR:
+
+```tsx
+import { QueryClient, dehydrate } from '@tanstack/react-query'
+import { graphqlClient } from './lib/graphql-client'
+
+export async function getServerSideProps() {
+  const queryClient = new QueryClient()
+
+  await queryClient.prefetchQuery({
+    queryKey: ['posts'],
+    queryFn: () => graphqlClient.request(postsQuery),
+  })
+
+  return {
+    props: {
+      dehydratedState: dehydrate(queryClient),
+    },
+  }
+}
+```
+
+<Note>
+  See the [Server-Side Rendering guide](/frameworks/react/ssr) for detailed SSR integration instructions.
+</Note>
+
+## Complete Example
+
+```tsx
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { GraphQLClient } from 'graphql-request'
+import { graphql } from './gql/gql'
+
+const client = new GraphQLClient('https://api.example.com/graphql')
+
+const todosQuery = graphql(`
+  query GetTodos {
+    todos {
+      id
+      text
+      completed
+    }
+  }
+`)
+
+const addTodoMutation = graphql(`
+  mutation AddTodo($text: String!) {
+    addTodo(text: $text) {
+      id
+      text
+      completed
+    }
+  }
+`)
+
+const toggleTodoMutation = graphql(`
+  mutation ToggleTodo($id: ID!) {
+    toggleTodo(id: $id) {
+      id
+      completed
+    }
+  }
+`)
+
+function TodoApp() {
+  const queryClient = useQueryClient()
+
+  const { data } = useQuery({
+    queryKey: ['todos'],
+    queryFn: () => client.request(todosQuery),
+  })
+
+  const addTodo = useMutation({
+    mutationFn: (text: string) => client.request(addTodoMutation, { text }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['todos'] }),
+  })
+
+  const toggleTodo = useMutation({
+    mutationFn: (id: string) => client.request(toggleTodoMutation, { id }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['todos'] }),
+  })
+
+  return (
+    <div>
+      <h1>Todos</h1>
+      <ul>
+        {data?.todos.map((todo) => (
+          <li key={todo.id}>
+            <input
+              type="checkbox"
+              checked={todo.completed}
+              onChange={() => toggleTodo.mutate(todo.id)}
+            />
+            {todo.text}
+          </li>
+        ))}
+      </ul>
+      <button onClick={() => addTodo.mutate('New Todo')}>
+        Add Todo
+      </button>
+    </div>
+  )
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="TypeScript" icon="code" href="/frameworks/react/typescript">
+    Learn about type-safe GraphQL queries
+  </Card>
+  <Card title="Server-Side Rendering" icon="server" href="/frameworks/react/ssr">
+    Implement SSR with GraphQL
+  </Card>
+</CardGroup>

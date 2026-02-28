@@ -1,0 +1,360 @@
+---
+title: QueryObserver
+description: The QueryObserver subscribes to a query and provides reactive updates.
+---
+
+## Overview
+
+The `QueryObserver` class is used to subscribe to a query and receive reactive updates when the query's state changes. It's the foundation for framework-specific hooks like `useQuery` in React.
+
+## Constructor
+
+```typescript
+const observer = new QueryObserver<TQueryFnData, TError, TData, TQueryData, TQueryKey>(
+  client: QueryClient,
+  options: QueryObserverOptions<TQueryFnData, TError, TData, TQueryData, TQueryKey>
+)
+```
+
+<ParamField path="client" type="QueryClient" required>
+  The QueryClient instance
+</ParamField>
+
+<ParamField path="options" type="QueryObserverOptions" required>
+  Options for the query observer
+  
+  <Expandable title="properties">
+    <ParamField path="queryKey" type="TQueryKey" required>
+      Unique key for the query
+    </ParamField>
+    
+    <ParamField path="queryFn" type="QueryFunction<TQueryFnData, TQueryKey>" optional>
+      Function that the query will use to fetch data
+    </ParamField>
+    
+    <ParamField path="enabled" type="boolean | ((query: Query) => boolean)" optional>
+      Enable or disable the query. Defaults to `true`.
+    </ParamField>
+    
+    <ParamField path="staleTime" type="number | 'static' | ((query: Query) => number | 'static')" optional>
+      Time in milliseconds after which data is considered stale
+    </ParamField>
+    
+    <ParamField path="gcTime" type="number" optional>
+      Time in milliseconds that unused cache data remains in memory
+    </ParamField>
+    
+    <ParamField path="refetchOnMount" type="boolean | 'always' | ((query: Query) => boolean | 'always')" optional>
+      Refetch on mount if data is stale. Defaults to `true`.
+    </ParamField>
+    
+    <ParamField path="refetchOnWindowFocus" type="boolean | 'always' | ((query: Query) => boolean | 'always')" optional>
+      Refetch on window focus if data is stale. Defaults to `true`.
+    </ParamField>
+    
+    <ParamField path="refetchOnReconnect" type="boolean | 'always' | ((query: Query) => boolean | 'always')" optional>
+      Refetch on reconnect if data is stale. Defaults to `true`.
+    </ParamField>
+    
+    <ParamField path="refetchInterval" type="number | false | ((query: Query) => number | false)" optional>
+      Continuously refetch at this interval in milliseconds
+    </ParamField>
+    
+    <ParamField path="refetchIntervalInBackground" type="boolean" optional>
+      Continue refetching when window is in background. Defaults to `false`.
+    </ParamField>
+    
+    <ParamField path="select" type="(data: TQueryData) => TData" optional>
+      Transform or select a part of the data
+    </ParamField>
+    
+    <ParamField path="placeholderData" type="TQueryData | PlaceholderDataFunction<TQueryData>" optional>
+      Placeholder data to show while loading
+    </ParamField>
+    
+    <ParamField path="notifyOnChangeProps" type="Array<keyof QueryObserverResult> | 'all' | (() => Array<keyof QueryObserverResult> | 'all')" optional>
+      Which properties trigger re-renders
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+**Example:**
+
+```typescript
+const observer = new QueryObserver(queryClient, {
+  queryKey: ['todos'],
+  queryFn: fetchTodos,
+  staleTime: 5000,
+})
+```
+
+## Methods
+
+### subscribe()
+
+Subscribes to query updates.
+
+```typescript
+const unsubscribe = observer.subscribe(
+  listener: (result: QueryObserverResult<TData, TError>) => void
+): () => void
+```
+
+<ParamField path="listener" type="(result: QueryObserverResult<TData, TError>) => void" required>
+  Callback function that receives query results
+</ParamField>
+
+**Returns:** Function to unsubscribe
+
+**Example:**
+
+```typescript
+const unsubscribe = observer.subscribe((result) => {
+  console.log('Data:', result.data)
+  console.log('Status:', result.status)
+  console.log('Is loading:', result.isLoading)
+})
+
+// Later, unsubscribe
+unsubscribe()
+```
+
+### getCurrentResult()
+
+Returns the current result without subscribing.
+
+```typescript
+const result = observer.getCurrentResult(): QueryObserverResult<TData, TError>
+```
+
+**Returns:** Current query result
+
+<ResponseField name="QueryObserverResult" type="object">
+  <Expandable title="properties">
+    <ResponseField name="data" type="TData | undefined">
+      The data for the query
+    </ResponseField>
+    
+    <ResponseField name="error" type="TError | null">
+      The error object if query failed
+    </ResponseField>
+    
+    <ResponseField name="status" type="'pending' | 'error' | 'success'">
+      The status of the query
+    </ResponseField>
+    
+    <ResponseField name="fetchStatus" type="'fetching' | 'paused' | 'idle'">
+      The fetch status of the query
+    </ResponseField>
+    
+    <ResponseField name="isLoading" type="boolean">
+      Is `true` whenever the first fetch is in-flight
+    </ResponseField>
+    
+    <ResponseField name="isPending" type="boolean">
+      Is `true` when there's no cached data and no query attempt has finished
+    </ResponseField>
+    
+    <ResponseField name="isSuccess" type="boolean">
+      Is `true` when the query has successfully fetched data
+    </ResponseField>
+    
+    <ResponseField name="isError" type="boolean">
+      Is `true` when the query has encountered an error
+    </ResponseField>
+    
+    <ResponseField name="isFetching" type="boolean">
+      Is `true` whenever the query function is executing
+    </ResponseField>
+    
+    <ResponseField name="isRefetching" type="boolean">
+      Is `true` when a background refetch is in-flight
+    </ResponseField>
+    
+    <ResponseField name="isStale" type="boolean">
+      Is `true` if the data is stale
+    </ResponseField>
+    
+    <ResponseField name="dataUpdatedAt" type="number">
+      Timestamp of when data was last updated
+    </ResponseField>
+    
+    <ResponseField name="errorUpdatedAt" type="number">
+      Timestamp of when error was last updated
+    </ResponseField>
+    
+    <ResponseField name="refetch" type="(options?: RefetchOptions) => Promise<QueryObserverResult>">
+      Function to manually refetch the query
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### setOptions()
+
+Updates the observer's options.
+
+```typescript
+observer.setOptions(
+  options: QueryObserverOptions<TQueryFnData, TError, TData, TQueryData, TQueryKey>
+): void
+```
+
+<ParamField path="options" type="QueryObserverOptions" required>
+  New options for the observer
+</ParamField>
+
+**Example:**
+
+```typescript
+observer.setOptions({
+  queryKey: ['todos'],
+  queryFn: fetchTodos,
+  staleTime: 10000, // Updated stale time
+})
+```
+
+### getOptimisticResult()
+
+Returns an optimistic result based on the provided options, without triggering a fetch.
+
+```typescript
+const result = observer.getOptimisticResult(
+  options: DefaultedQueryObserverOptions<TQueryFnData, TError, TData, TQueryData, TQueryKey>
+): QueryObserverResult<TData, TError>
+```
+
+**Returns:** Optimistic query result
+
+<Note>
+  This method is useful for framework integrations that need to compute what the result would be before actually subscribing.
+</Note>
+
+### refetch()
+
+Manually refetches the query.
+
+```typescript
+const result = await observer.refetch(options?: RefetchOptions): Promise<QueryObserverResult<TData, TError>>
+```
+
+<ParamField path="options" type="RefetchOptions" optional>
+  <Expandable title="properties">
+    <ParamField path="cancelRefetch" type="boolean" optional>
+      Cancel currently running query before refetching. Defaults to `true`.
+    </ParamField>
+    
+    <ParamField path="throwOnError" type="boolean" optional>
+      Throw error instead of returning it in result. Defaults to `false`.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+**Returns:** Promise resolving to the query result
+
+**Example:**
+
+```typescript
+const result = await observer.refetch()
+console.log('Refetched data:', result.data)
+```
+
+### fetchOptimistic()
+
+Fetches a query with new options without subscribing.
+
+```typescript
+const result = await observer.fetchOptimistic(
+  options: QueryObserverOptions<TQueryFnData, TError, TData, TQueryData, TQueryKey>
+): Promise<QueryObserverResult<TData, TError>>
+```
+
+**Returns:** Promise resolving to the query result
+
+### getCurrentQuery()
+
+Returns the underlying Query instance.
+
+```typescript
+const query = observer.getCurrentQuery(): Query<TQueryFnData, TError, TQueryData, TQueryKey>
+```
+
+**Returns:** The Query instance
+
+### trackResult()
+
+Returns a proxied result that tracks which properties are accessed.
+
+```typescript
+const trackedResult = observer.trackResult(
+  result: QueryObserverResult<TData, TError>,
+  onPropTracked?: (key: keyof QueryObserverResult) => void
+): QueryObserverResult<TData, TError>
+```
+
+<Note>
+  This is used internally for optimizing re-renders by only triggering updates when tracked properties change.
+</Note>
+
+### destroy()
+
+Destroys the observer and unsubscribes from the query.
+
+```typescript
+observer.destroy(): void
+```
+
+**Example:**
+
+```typescript
+observer.destroy()
+```
+
+## Properties
+
+### options
+
+The current options for the observer.
+
+```typescript
+observer.options: QueryObserverOptions<TQueryFnData, TError, TData, TQueryData, TQueryKey>
+```
+
+## Type Parameters
+
+- `TQueryFnData` - The type of data returned by the query function
+- `TError` - The type of error that can be thrown (defaults to `DefaultError`)
+- `TData` - The type of data after selection/transformation
+- `TQueryData` - The type of data stored in the cache
+- `TQueryKey` - The type of the query key
+
+## Usage Example
+
+```typescript
+import { QueryClient, QueryObserver } from '@tanstack/query-core'
+
+const queryClient = new QueryClient()
+
+const observer = new QueryObserver(queryClient, {
+  queryKey: ['todos'],
+  queryFn: async () => {
+    const response = await fetch('/api/todos')
+    return response.json()
+  },
+  staleTime: 5000,
+})
+
+// Subscribe to updates
+const unsubscribe = observer.subscribe((result) => {
+  if (result.isLoading) {
+    console.log('Loading...')
+  } else if (result.isError) {
+    console.error('Error:', result.error)
+  } else if (result.isSuccess) {
+    console.log('Data:', result.data)
+  }
+})
+
+// Later, clean up
+unsubscribe()
+observer.destroy()
+```

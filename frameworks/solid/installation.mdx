@@ -1,0 +1,304 @@
+---
+title: Installing Solid Query
+description: Install and configure TanStack Solid Query in your SolidJS application
+---
+
+# Installation
+
+Get started with Solid Query by installing the package and setting up your application.
+
+## Prerequisites
+
+Solid Query requires SolidJS 1.6.0 or higher.
+
+```json
+{
+  "peerDependencies": {
+    "solid-js": "^1.6.0"
+  }
+}
+```
+
+## Package Installation
+
+<CodeGroup>
+
+```bash npm
+npm install @tanstack/solid-query
+```
+
+```bash pnpm
+pnpm add @tanstack/solid-query
+```
+
+```bash yarn
+yarn add @tanstack/solid-query
+```
+
+```bash bun
+bun add @tanstack/solid-query
+```
+
+</CodeGroup>
+
+<Note>
+Solid Query follows semantic versioning. The current version is **5.90.23**.
+</Note>
+
+## Basic Setup
+
+After installation, set up the `QueryClientProvider` in your application root:
+
+<Steps>
+
+### Create a Query Client
+
+Create a `QueryClient` instance that will manage your queries:
+
+```tsx
+import { QueryClient } from '@tanstack/solid-query'
+
+const queryClient = new QueryClient()
+```
+
+### Wrap Your App
+
+Wrap your application with `QueryClientProvider`:
+
+```tsx
+import { render } from 'solid-js/web'
+import { QueryClient, QueryClientProvider } from '@tanstack/solid-query'
+
+const queryClient = new QueryClient()
+
+function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <div>
+        <h1>My App</h1>
+        {/* Your application components */}
+      </div>
+    </QueryClientProvider>
+  )
+}
+
+render(() => <App />, document.getElementById('root')!)
+```
+
+### Start Using Queries
+
+Now you can use Solid Query primitives in any component:
+
+```tsx
+import { useQuery } from '@tanstack/solid-query'
+
+function TodoList() {
+  const todosQuery = useQuery(() => ({
+    queryKey: ['todos'],
+    queryFn: async () => {
+      const response = await fetch('https://api.example.com/todos')
+      return response.json()
+    },
+  }))
+
+  return (
+    <div>
+      <Show when={todosQuery.data}>
+        {(todos) => (
+          <For each={todos()}>
+            {(todo) => <li>{todo.title}</li>}
+          </For>
+        )}
+      </Show>
+    </div>
+  )
+}
+```
+
+</Steps>
+
+## Configuration Options
+
+Customize the `QueryClient` with default options:
+
+```tsx
+import { QueryClient } from '@tanstack/solid-query'
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      // Queries will not refetch on window focus by default
+      refetchOnWindowFocus: false,
+      // Queries will be considered stale after 5 minutes
+      staleTime: 5 * 60 * 1000,
+      // Failed queries will retry 3 times before showing an error
+      retry: 3,
+      // Retry with exponential backoff
+      retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
+    },
+    mutations: {
+      // Mutations will retry once on failure
+      retry: 1,
+    },
+  },
+})
+```
+
+### Common Configuration Options
+
+<Note>
+These are the most commonly used configuration options. See the full API reference for all available options.
+</Note>
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `staleTime` | `number` | `0` | Time in milliseconds before data is considered stale |
+| `gcTime` | `number` | `5 * 60 * 1000` | Time before inactive queries are garbage collected |
+| `refetchOnWindowFocus` | `boolean` | `true` | Refetch queries when window regains focus |
+| `refetchOnReconnect` | `boolean` | `true` | Refetch queries when network reconnects |
+| `retry` | `number \| boolean` | `3` | Number of retry attempts for failed queries |
+| `retryDelay` | `function` | exponential | Delay between retry attempts |
+
+## Server-Side Rendering Setup
+
+For SSR applications, create a new `QueryClient` instance per request:
+
+```tsx
+import { renderToString } from 'solid-js/web'
+import { QueryClient, QueryClientProvider } from '@tanstack/solid-query'
+
+// Server-side handler
+export async function handler(req, res) {
+  // Create a new client for each request
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        // SSR-specific options are automatically applied
+        // retry: false (set automatically on server)
+        // throwOnError: true (set automatically on server)
+      },
+    },
+  })
+
+  const html = renderToString(() => (
+    <QueryClientProvider client={queryClient}>
+      <App />
+    </QueryClientProvider>
+  ))
+
+  res.send(html)
+}
+```
+
+<Warning>
+Always create a new `QueryClient` instance for each request in SSR to prevent data leaking between users.
+</Warning>
+
+## DevTools Installation (Optional)
+
+Install the DevTools package for development debugging:
+
+<CodeGroup>
+
+```bash npm
+npm install @tanstack/solid-query-devtools
+```
+
+```bash pnpm
+pnpm add @tanstack/solid-query-devtools
+```
+
+```bash yarn
+yarn add @tanstack/solid-query-devtools
+```
+
+```bash bun
+bun add @tanstack/solid-query-devtools
+```
+
+</CodeGroup>
+
+Add the DevTools component to your app:
+
+```tsx
+import { QueryClient, QueryClientProvider } from '@tanstack/solid-query'
+import { SolidQueryDevtools } from '@tanstack/solid-query-devtools'
+
+const queryClient = new QueryClient()
+
+function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <YourApp />
+      <SolidQueryDevtools />
+    </QueryClientProvider>
+  )
+}
+```
+
+<Tip>
+DevTools are automatically excluded from production builds when using the default configuration.
+</Tip>
+
+## TypeScript Setup
+
+Solid Query is written in TypeScript and provides full type safety out of the box. No additional configuration is needed, but you can enhance type inference:
+
+```tsx
+import { useQuery } from '@tanstack/solid-query'
+
+interface Todo {
+  id: number
+  title: string
+  completed: boolean
+}
+
+function TodoList() {
+  // TypeScript will infer the return type from queryFn
+  const todosQuery = useQuery(() => ({
+    queryKey: ['todos'],
+    queryFn: async (): Promise<Todo[]> => {
+      const response = await fetch('/api/todos')
+      return response.json()
+    },
+  }))
+
+  // todosQuery.data is typed as Todo[] | undefined
+  return <div>{todosQuery.data?.length} todos</div>
+}
+```
+
+## Bundle Size
+
+Solid Query is designed to be lightweight:
+
+- **@tanstack/solid-query**: ~15kb min+gzip
+- **@tanstack/solid-query-devtools**: ~25kb min+gzip (dev only)
+
+<Note>
+The exact bundle size depends on your bundler and tree-shaking configuration. The package is fully tree-shakeable.
+</Note>
+
+## Version Compatibility
+
+Solid Query is tested against multiple TypeScript versions:
+
+- TypeScript 5.0+
+- TypeScript 5.1+
+- TypeScript 5.2+
+- TypeScript 5.3+
+- TypeScript 5.4+
+- TypeScript 5.5+
+- TypeScript 5.6+
+- TypeScript 5.7+ (latest)
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="rocket" href="/frameworks/solid/quick-start">
+    Build your first application with Solid Query
+  </Card>
+  <Card title="Overview" icon="book" href="/frameworks/solid/overview">
+    Learn about core concepts and features
+  </Card>
+</CardGroup>

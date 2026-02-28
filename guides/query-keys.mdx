@@ -1,0 +1,388 @@
+---
+title: Query Keys
+description: Understanding and managing query keys in TanStack Query
+---
+
+Query keys are the foundation of TanStack Query's caching system. They uniquely identify queries and determine when data should be refetched.
+
+## What are Query Keys?
+
+Query keys are arrays that uniquely identify a query. They can be as simple as a single string or as complex as nested objects:
+
+```tsx
+// Simple key
+useQuery({ queryKey: ['todos'], queryFn: fetchAllTodos })
+
+// Key with parameters
+useQuery({ queryKey: ['todo', 5], queryFn: () => fetchTodo(5) })
+
+// Complex key
+useQuery({ 
+  queryKey: ['todos', { status: 'done', page: 1 }], 
+  queryFn: () => fetchTodos({ status: 'done', page: 1 })
+})
+```
+
+<Note>
+Query keys must be arrays in TanStack Query v4+. Single strings are no longer supported.
+</Note>
+
+## Query Key Structure
+
+Query keys are serialized deterministically, so these are equivalent:
+
+```tsx
+// These produce the same query hash
+useQuery({ queryKey: ['todos', { status: 'done', page: 1 }] })
+useQuery({ queryKey: ['todos', { page: 1, status: 'done' }] })
+```
+
+<Warning>
+Query keys are hashed in a deterministic way, but object property order doesn't matter. However, arrays are order-sensitive.
+</Warning>
+
+## Query Key Conventions
+
+<Steps>
+  <Step title="Use Arrays">
+    Always use arrays for query keys, even for simple queries.
+    ```tsx
+    // Good
+    queryKey: ['todos']
+    
+    // Bad (v3 style)
+    queryKey: 'todos'
+    ```
+  </Step>
+  <Step title="Hierarchy">
+    Structure keys from general to specific.
+    ```tsx
+    queryKey: ['todos']
+    queryKey: ['todos', 'list']
+    queryKey: ['todos', 'list', { filter: 'done' }]
+    queryKey: ['todos', 'detail', todoId]
+    ```
+  </Step>
+  <Step title="Include Dependencies">
+    Include all variables that the query function depends on.
+    ```tsx
+    function useTodo(todoId) {
+      return useQuery({
+        queryKey: ['todo', todoId],
+        queryFn: () => fetchTodo(todoId),
+      })
+    }
+    ```
+  </Step>
+  <Step title="Consistent Naming">
+    Use consistent naming patterns across your application.
+    ```tsx
+    // Resource-based
+    queryKey: ['users', userId]
+    queryKey: ['posts', postId]
+    queryKey: ['comments', commentId]
+    ```
+  </Step>
+</Steps>
+
+## Query Key Factories
+
+Create factories to ensure consistent query keys:
+
+```tsx
+const todoKeys = {
+  all: ['todos'] as const,
+  lists: () => [...todoKeys.all, 'list'] as const,
+  list: (filters: string) => [...todoKeys.lists(), { filters }] as const,
+  details: () => [...todoKeys.all, 'detail'] as const,
+  detail: (id: number) => [...todoKeys.details(), id] as const,
+}
+
+// Usage
+useQuery({
+  queryKey: todoKeys.list('done'),
+  queryFn: () => fetchTodos('done'),
+})
+
+useQuery({
+  queryKey: todoKeys.detail(5),
+  queryFn: () => fetchTodo(5),
+})
+
+// Invalidate all todo queries
+queryClient.invalidateQueries({ queryKey: todoKeys.all })
+
+// Invalidate all todo lists
+queryClient.invalidateQueries({ queryKey: todoKeys.lists() })
+
+// Invalidate specific todo
+queryClient.invalidateQueries({ queryKey: todoKeys.detail(5) })
+```
+
+<Tip>
+Query key factories make it easy to manage and invalidate related queries.
+</Tip>
+
+## Partial Matching
+
+Query keys support partial matching for invalidation:
+
+```tsx
+// Invalidate all queries starting with ['todos']
+queryClient.invalidateQueries({ queryKey: ['todos'] })
+
+// This invalidates:
+// ['todos']
+// ['todos', 'list']
+// ['todos', 'list', { filter: 'done' }]
+// ['todos', 'detail', 1]
+```
+
+## Exact Matching
+
+Use exact matching when you need precision:
+
+```tsx
+// Only invalidate exact match
+queryClient.invalidateQueries({ 
+  queryKey: ['todos', 'list'], 
+  exact: true 
+})
+
+// This invalidates:
+// ['todos', 'list'] ✓
+
+// This does NOT invalidate:
+// ['todos', 'list', { filter: 'done' }] ✗
+```
+
+## Query Key Dependencies
+
+Always include query function dependencies in the key:
+
+```tsx
+function useTodosByUser(userId: number, status: string) {
+  return useQuery({
+    // Both userId and status are in the key
+    queryKey: ['todos', userId, status],
+    queryFn: () => fetchTodosByUser(userId, status),
+  })
+}
+```
+
+<Warning>
+If you don't include all dependencies in the query key, you may see stale data when those dependencies change.
+</Warning>
+
+## Dynamic Query Keys
+
+Query keys can include computed values:
+
+```tsx
+function useProjects(filters: ProjectFilters) {
+  return useQuery({
+    queryKey: ['projects', filters],
+    queryFn: () => fetchProjects(filters),
+  })
+}
+
+// The query key automatically updates when filters change
+const { data } = useProjects({ status: 'active', page: 1 })
+```
+
+## Query Key Hashing
+
+TanStack Query hashes query keys internally:
+
+```tsx
+// These are treated as different queries
+queryKey: ['todos', { status: 'done' }]  // Hash: "[todos, {status:done}]"
+queryKey: ['todos', { status: 'active' }] // Hash: "[todos, {status:active}]"
+
+// But these are the same
+queryKey: ['todos', { status: 'done', page: 1 }]
+queryKey: ['todos', { page: 1, status: 'done' }] // Same hash!
+```
+
+## Custom Query Key Hash Function
+
+Customize how query keys are hashed:
+
+```tsx
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      queryKeyHashFn: (queryKey) => {
+        // Custom hash function
+        return JSON.stringify(queryKey)
+      },
+    },
+  },
+})
+```
+
+## Accessing Query Data by Key
+
+Retrieve cached data using query keys:
+
+```tsx
+import { useQueryClient } from '@tanstack/react-query'
+
+function TodoComponent({ todoId }) {
+  const queryClient = useQueryClient()
+
+  // Get data from cache
+  const cachedTodo = queryClient.getQueryData(['todo', todoId])
+
+  // Set data in cache
+  queryClient.setQueryData(['todo', todoId], newTodo)
+
+  // Remove data from cache
+  queryClient.removeQueries({ queryKey: ['todo', todoId] })
+}
+```
+
+## Query Key Best Practices
+
+<Tabs>
+  <Tab title="Do">
+    ```tsx
+    // Use descriptive keys
+    queryKey: ['users', 'profile', userId]
+    
+    // Include all dependencies
+    queryKey: ['posts', { authorId, status }]
+    
+    // Use factories for consistency
+    queryKey: postKeys.detail(postId)
+    
+    // Order from general to specific
+    queryKey: ['todos', 'list', filters]
+    ```
+  </Tab>
+  <Tab title="Don't">
+    ```tsx
+    // Don't use strings (v3 style)
+    queryKey: 'users'
+    
+    // Don't omit dependencies
+    queryKey: ['posts'] // Missing authorId!
+    
+    // Don't use inconsistent patterns
+    queryKey: ['user', userId]
+    queryKey: [userId, 'user'] // Inconsistent order
+    
+    // Don't include non-deterministic values
+    queryKey: ['todos', Math.random()]
+    ```
+  </Tab>
+</Tabs>
+
+## TypeScript and Query Keys
+
+Type-safe query keys with TypeScript:
+
+```tsx
+type TodoQueryKey = ['todos'] | ['todos', 'list'] | ['todos', 'detail', number]
+
+const todoKeys = {
+  all: ['todos'] as const,
+  lists: () => [...todoKeys.all, 'list'] as const,
+  details: () => [...todoKeys.all, 'detail'] as const,
+  detail: (id: number) => [...todoKeys.details(), id] as const,
+} satisfies Record<string, () => TodoQueryKey | TodoQueryKey[number][]>
+
+// Usage with type safety
+function useTodo(id: number) {
+  return useQuery({
+    queryKey: todoKeys.detail(id),
+    queryFn: () => fetchTodo(id),
+  })
+}
+```
+
+## Invalidating with Filters
+
+Use filters for fine-grained invalidation control:
+
+```tsx
+// Invalidate all queries
+queryClient.invalidateQueries()
+
+// Invalidate queries starting with ['todos']
+queryClient.invalidateQueries({ queryKey: ['todos'] })
+
+// Invalidate exact query
+queryClient.invalidateQueries({ 
+  queryKey: ['todos', 'list'], 
+  exact: true 
+})
+
+// Invalidate with predicate
+queryClient.invalidateQueries({
+  predicate: (query) => 
+    query.queryKey[0] === 'todos' && query.state.data?.length > 0
+})
+
+// Invalidate stale queries only
+queryClient.invalidateQueries({ 
+  queryKey: ['todos'],
+  refetchType: 'active', // Only refetch active queries
+})
+```
+
+## Query Key Prefetching
+
+Prefetch data using query keys:
+
+```tsx
+function TodosPage() {
+  const queryClient = useQueryClient()
+
+  const handleMouseEnter = (todoId: number) => {
+    // Prefetch todo details on hover
+    queryClient.prefetchQuery({
+      queryKey: ['todo', todoId],
+      queryFn: () => fetchTodo(todoId),
+    })
+  }
+
+  return (
+    <div>
+      {todos.map((todo) => (
+        <div key={todo.id} onMouseEnter={() => handleMouseEnter(todo.id)}>
+          {todo.title}
+        </div>
+      ))}
+    </div>
+  )
+}
+```
+
+## Query Key Patterns
+
+Common patterns for organizing query keys:
+
+```tsx
+// By resource
+const keys = {
+  users: ['users'],
+  posts: ['posts'],
+  comments: ['comments'],
+}
+
+// By feature
+const dashboardKeys = {
+  stats: ['dashboard', 'stats'],
+  activity: ['dashboard', 'activity'],
+  reports: ['dashboard', 'reports'],
+}
+
+// By entity and operation
+const userKeys = {
+  list: (filters) => ['users', 'list', filters],
+  detail: (id) => ['users', 'detail', id],
+  profile: (id) => ['users', 'profile', id],
+  settings: (id) => ['users', 'settings', id],
+}
+```

@@ -1,0 +1,380 @@
+---
+title: Dependent Queries
+description: Execute queries sequentially based on data from previous queries
+---
+
+Dependent queries (also known as serial queries) wait for previous queries to complete before executing. This is useful when you need data from one query to construct the next query.
+
+## Basic Dependent Query
+
+Use the `enabled` option to control when a query runs:
+
+```tsx
+import { useQuery } from '@tanstack/react-query'
+
+function Post({ postId }) {
+  // First query: fetch the post
+  const { data: post } = useQuery({
+    queryKey: ['post', postId],
+    queryFn: () => fetchPost(postId),
+  })
+
+  // Second query: depends on post.userId
+  const { data: user } = useQuery({
+    queryKey: ['user', post?.userId],
+    queryFn: () => fetchUser(post.userId),
+    enabled: !!post?.userId, // Only run when post.userId exists
+  })
+
+  if (!post) return <div>Loading post...</div>
+
+  return (
+    <div>
+      <h1>{post.title}</h1>
+      {user && <p>By {user.name}</p>}
+      <p>{post.body}</p>
+    </div>
+  )
+}
+```
+
+<Note>
+  The `enabled` option accepts a boolean or a function that returns a boolean. When `false`, the query will not execute and will stay in an `idle` state.
+</Note>
+
+## Enabled Option Types
+
+The `enabled` option can be a boolean or a function:
+
+```tsx
+// Boolean value
+useQuery({
+  queryKey: ['user', userId],
+  queryFn: () => fetchUser(userId),
+  enabled: !!userId,
+})
+
+// Function returning boolean
+useQuery({
+  queryKey: ['user', userId],
+  queryFn: () => fetchUser(userId),
+  enabled: (query) => {
+    // Access the query instance for complex logic
+    return !!userId && !query.state.error
+  },
+})
+```
+
+## Multiple Dependencies
+
+Chain multiple dependent queries:
+
+```tsx
+function UserProfile({ userId }) {
+  // First: fetch user
+  const { data: user } = useQuery({
+    queryKey: ['user', userId],
+    queryFn: () => fetchUser(userId),
+    enabled: !!userId,
+  })
+
+  // Second: fetch user's company
+  const { data: company } = useQuery({
+    queryKey: ['company', user?.companyId],
+    queryFn: () => fetchCompany(user.companyId),
+    enabled: !!user?.companyId,
+  })
+
+  // Third: fetch company's projects
+  const { data: projects } = useQuery({
+    queryKey: ['projects', company?.id],
+    queryFn: () => fetchCompanyProjects(company.id),
+    enabled: !!company?.id,
+  })
+
+  return (
+    <div>
+      <h1>{user?.name}</h1>
+      <h2>{company?.name}</h2>
+      <ProjectList projects={projects} />
+    </div>
+  )
+}
+```
+
+<Steps>
+  <Step title="First query loads">
+    The user query runs immediately when `userId` is available.
+  </Step>
+
+  <Step title="Second query waits">
+    The company query waits until `user.companyId` is available.
+  </Step>
+
+  <Step title="Third query waits">
+    The projects query waits until `company.id` is available.
+  </Step>
+</Steps>
+
+## Handling Loading States
+
+Show appropriate loading states for dependent queries:
+
+```tsx
+function Post({ postId }) {
+  const { 
+    data: post, 
+    isPending: postPending,
+    isError: postError 
+  } = useQuery({
+    queryKey: ['post', postId],
+    queryFn: () => fetchPost(postId),
+  })
+
+  const { 
+    data: author, 
+    isPending: authorPending 
+  } = useQuery({
+    queryKey: ['user', post?.userId],
+    queryFn: () => fetchUser(post.userId),
+    enabled: !!post?.userId,
+  })
+
+  if (postPending) {
+    return <div>Loading post...</div>
+  }
+
+  if (postError) {
+    return <div>Error loading post</div>
+  }
+
+  return (
+    <article>
+      <h1>{post.title}</h1>
+      <div className="author">
+        {authorPending ? (
+          <span>Loading author...</span>
+        ) : (
+          <span>By {author?.name}</span>
+        )}
+      </div>
+      <p>{post.body}</p>
+    </article>
+  )
+}
+```
+
+<Tip>
+  Show the main content as soon as it's available, with a loading indicator for dependent data. This provides a better user experience than waiting for all data.
+</Tip>
+
+## Conditional Queries
+
+Enable queries based on user actions or application state:
+
+```tsx
+function UserSettings({ userId }) {
+  const [showPreferences, setShowPreferences] = useState(false)
+
+  const { data: user } = useQuery({
+    queryKey: ['user', userId],
+    queryFn: () => fetchUser(userId),
+  })
+
+  const { data: preferences } = useQuery({
+    queryKey: ['preferences', userId],
+    queryFn: () => fetchUserPreferences(userId),
+    enabled: !!userId && showPreferences, // Only fetch when needed
+  })
+
+  return (
+    <div>
+      <h1>{user?.name}</h1>
+      <button onClick={() => setShowPreferences(true)}>
+        Show Preferences
+      </button>
+      {showPreferences && preferences && (
+        <PreferencesList data={preferences} />
+      )}
+    </div>
+  )
+}
+```
+
+<Note>
+  This pattern is useful for lazy-loading data that's not immediately needed, reducing initial load time and server load.
+</Note>
+
+## Query Function with Enabled
+
+Ensure the query function can safely execute when enabled:
+
+```tsx
+const { data } = useQuery({
+  queryKey: ['user', post?.userId],
+  queryFn: ({ queryKey }) => {
+    const [, userId] = queryKey
+    if (!userId) {
+      throw new Error('User ID is required')
+    }
+    return fetchUser(userId)
+  },
+  enabled: !!post?.userId,
+})
+```
+
+<Warning>
+  Always ensure your query function can handle the data it needs. The `enabled` option prevents execution, but type safety may still require null checks.
+</Warning>
+
+## Refetching Dependent Queries
+
+Manually refetch dependent queries when needed:
+
+```tsx
+function Post({ postId }) {
+  const { data: post, refetch: refetchPost } = useQuery({
+    queryKey: ['post', postId],
+    queryFn: () => fetchPost(postId),
+  })
+
+  const { data: author, refetch: refetchAuthor } = useQuery({
+    queryKey: ['user', post?.userId],
+    queryFn: () => fetchUser(post.userId),
+    enabled: !!post?.userId,
+  })
+
+  const refreshAll = async () => {
+    await refetchPost()
+    // Author will automatically refetch if userId changed
+    // Or manually trigger:
+    if (post?.userId) {
+      await refetchAuthor()
+    }
+  }
+
+  return (
+    <div>
+      <button onClick={refreshAll}>Refresh</button>
+      {/* ... */}
+    </div>
+  )
+}
+```
+
+## Using with Dynamic Keys
+
+Include all dependencies in the query key for proper caching:
+
+```tsx
+function Comment({ commentId }) {
+  const { data: comment } = useQuery({
+    queryKey: ['comment', commentId],
+    queryFn: () => fetchComment(commentId),
+  })
+
+  // Include both postId and userId in the key
+  const { data: context } = useQuery({
+    queryKey: ['comment-context', comment?.postId, comment?.userId],
+    queryFn: () => fetchCommentContext({
+      postId: comment.postId,
+      userId: comment.userId,
+    }),
+    enabled: !!(comment?.postId && comment?.userId),
+  })
+
+  return (
+    <div>
+      <p>{comment?.text}</p>
+      {context && <ContextInfo data={context} />}
+    </div>
+  )
+}
+```
+
+<Tip>
+  Include all variables used in the query function in the query key. This ensures proper cache invalidation and prevents stale data issues.
+</Tip>
+
+## Initial Data from Parent Query
+
+Optimize by using data from a parent query as initial data:
+
+```tsx
+function UserDetail({ userId }) {
+  // Parent query with list of users
+  const { data: users } = useQuery({
+    queryKey: ['users'],
+    queryFn: fetchUsers,
+  })
+
+  // Detail query with initial data from list
+  const { data: user } = useQuery({
+    queryKey: ['user', userId],
+    queryFn: () => fetchUser(userId),
+    enabled: !!userId,
+    initialData: () => users?.find((u) => u.id === userId),
+    // Mark as stale so it refetches in background
+    staleTime: 0,
+  })
+
+  return <div>{user?.name}</div>
+}
+```
+
+<Note>
+  Using `initialData` from a parent query provides instant UI updates while still fetching fresh data in the background.
+</Note>
+
+## Dependent Mutations
+
+Wait for a query before running a mutation:
+
+```tsx
+function EditPost({ postId }) {
+  const { data: post } = useQuery({
+    queryKey: ['post', postId],
+    queryFn: () => fetchPost(postId),
+  })
+
+  const updatePost = useMutation({
+    mutationFn: (updates) => updatePostAPI(postId, updates),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['post', postId] })
+    },
+  })
+
+  const handleSubmit = (formData) => {
+    if (!post) {
+      console.error('Post not loaded yet')
+      return
+    }
+    updatePost.mutate(formData)
+  }
+
+  if (!post) return <div>Loading...</div>
+
+  return <PostForm initialData={post} onSubmit={handleSubmit} />
+}
+```
+
+## Alternative: skipToken
+
+Use `skipToken` to skip queries in a type-safe way:
+
+```tsx
+import { useQuery, skipToken } from '@tanstack/react-query'
+
+function Post({ postId }) {
+  const { data: post } = useQuery({
+    queryKey: ['post', postId],
+    queryFn: postId ? () => fetchPost(postId) : skipToken,
+  })
+
+  return <div>{post?.title}</div>
+}
+```
+
+<Tip>
+  `skipToken` is a type-safe alternative to the `enabled` option when you want to conditionally skip a query based on missing parameters.
+</Tip>

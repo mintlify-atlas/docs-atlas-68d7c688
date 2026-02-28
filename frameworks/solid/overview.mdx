@@ -1,0 +1,306 @@
+---
+title: Solid Query Overview
+description: Powerful data fetching and state management for SolidJS applications
+---
+
+# Solid Query Overview
+
+TanStack Solid Query is a powerful library for managing server state in SolidJS applications. It provides primitives for fetching, caching, synchronizing, and updating asynchronous data with zero-config, automatic caching, background updates, and more.
+
+## What is Solid Query?
+
+Solid Query is the SolidJS adapter for TanStack Query, bringing all the power of TanStack Query to SolidJS applications with full support for SolidJS reactivity primitives and patterns.
+
+<Note>
+Solid Query leverages SolidJS's fine-grained reactivity system and Resources to provide optimal performance and developer experience.
+</Note>
+
+## Key Features
+
+- **Transport/Protocol Agnostic**: Works with REST, GraphQL, or any promise-based data fetching
+- **Auto Caching + Refetching**: Implements stale-while-revalidate with window refocus and polling support
+- **Parallel + Dependent Queries**: Execute multiple queries efficiently
+- **Mutations + Reactive Query Refetching**: Update data with automatic cache invalidation
+- **Multi-layer Cache**: Built-in automatic garbage collection
+- **Pagination + Infinite Scroll**: First-class support with scroll recovery
+- **Request Cancellation**: Automatic cleanup of outdated requests
+- **SSR Support**: Full server-side rendering with streaming
+- **Dedicated Devtools**: Visual debugging and inspection tools
+
+## Core Concepts
+
+### Queries
+
+Queries are declarative dependencies on asynchronous data sources. Use the `useQuery` primitive to fetch data:
+
+```tsx
+import { useQuery } from '@tanstack/solid-query'
+
+function TodoList() {
+  const todosQuery = useQuery(() => ({
+    queryKey: ['todos'],
+    queryFn: async () => {
+      const response = await fetch('/api/todos')
+      return response.json()
+    },
+  }))
+
+  return (
+    <div>
+      <Show when={todosQuery.data}>
+        {(todos) => (
+          <ul>
+            <For each={todos()}>
+              {(todo) => <li>{todo.title}</li>}
+            </For>
+          </ul>
+        )}
+      </Show>
+    </div>
+  )
+}
+```
+
+### Mutations
+
+Mutations are used to create, update, or delete data. Use the `useMutation` primitive:
+
+```tsx
+import { useMutation, useQueryClient } from '@tanstack/solid-query'
+
+function AddTodo() {
+  const queryClient = useQueryClient()
+  
+  const mutation = useMutation(() => ({
+    mutationFn: async (newTodo: { title: string }) => {
+      const response = await fetch('/api/todos', {
+        method: 'POST',
+        body: JSON.stringify(newTodo),
+      })
+      return response.json()
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['todos'] })
+    },
+  }))
+
+  return (
+    <button onClick={() => mutation.mutate({ title: 'New Todo' })}>
+      Add Todo
+    </button>
+  )
+}
+```
+
+### Infinite Queries
+
+For paginated or infinite scroll data, use `useInfiniteQuery`:
+
+```tsx
+import { useInfiniteQuery } from '@tanstack/solid-query'
+
+function InfiniteList() {
+  const query = useInfiniteQuery(() => ({
+    queryKey: ['projects'],
+    queryFn: async ({ pageParam = 0 }) => {
+      const response = await fetch(`/api/projects?cursor=${pageParam}`)
+      return response.json()
+    },
+    initialPageParam: 0,
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
+  }))
+
+  return (
+    <div>
+      <For each={query.data?.pages}>
+        {(page) => (
+          <For each={page.projects}>
+            {(project) => <div>{project.name}</div>}
+          </For>
+        )}
+      </For>
+      <button
+        onClick={() => query.fetchNextPage()}
+        disabled={!query.hasNextPage || query.isFetchingNextPage}
+      >
+        Load More
+      </button>
+    </div>
+  )
+}
+```
+
+## SolidJS Integration
+
+### Reactive Primitives
+
+Solid Query is built on SolidJS primitives:
+
+- Uses `createResource` internally for suspense support
+- Integrates with `createStore` for reactive state
+- Leverages `createComputed` and `createMemo` for efficient updates
+- Supports `onCleanup` for proper resource disposal
+
+### Suspense Support
+
+<Note>
+The `data` property on query results is a SolidJS Resource that automatically suspends when loading.
+</Note>
+
+```tsx
+import { Suspense } from 'solid-js'
+import { useQuery } from '@tanstack/solid-query'
+
+function UserProfile(props: { userId: string }) {
+  const userQuery = useQuery(() => ({
+    queryKey: ['user', props.userId],
+    queryFn: () => fetchUser(props.userId),
+  }))
+
+  return <div>{userQuery.data.name}</div>
+}
+
+function App() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <UserProfile userId="1" />
+    </Suspense>
+  )
+}
+```
+
+## Query Client Provider
+
+All queries and mutations must be wrapped in a `QueryClientProvider`:
+
+```tsx
+import { QueryClient, QueryClientProvider } from '@tanstack/solid-query'
+import { render } from 'solid-js/web'
+
+const queryClient = new QueryClient()
+
+function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <YourApp />
+    </QueryClientProvider>
+  )
+}
+
+render(() => <App />, document.getElementById('root')!)
+```
+
+## Server-Side Rendering
+
+Solid Query has first-class support for SSR:
+
+```tsx
+import { QueryClient, QueryClientProvider } from '@tanstack/solid-query'
+import { renderToString } from 'solid-js/web'
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      // SSR-specific configuration happens automatically
+      // retry is disabled and throwOnError is enabled on server
+    },
+  },
+})
+
+const html = renderToString(() => (
+  <QueryClientProvider client={queryClient}>
+    <App />
+  </QueryClientProvider>
+))
+```
+
+<Tip>
+Queries automatically configure themselves for server-side rendering. Retry is disabled and errors are thrown to be caught by ErrorBoundary.
+</Tip>
+
+## Query Options Helper
+
+Use `queryOptions` for type-safe, reusable query configurations:
+
+```tsx
+import { queryOptions, useQuery } from '@tanstack/solid-query'
+
+const todoQueries = {
+  all: () => queryOptions({
+    queryKey: ['todos'],
+    queryFn: fetchTodos,
+  }),
+  detail: (id: string) => queryOptions({
+    queryKey: ['todos', id],
+    queryFn: () => fetchTodo(id),
+  }),
+}
+
+function TodoDetail(props: { id: string }) {
+  const query = useQuery(() => todoQueries.detail(props.id))
+  return <div>{query.data?.title}</div>
+}
+```
+
+## Performance Considerations
+
+### Fine-Grained Reactivity
+
+Solid Query integrates with SolidJS's fine-grained reactivity:
+
+```tsx
+function Component() {
+  const query = useQuery(() => ({ queryKey: ['data'], queryFn: fetchData }))
+  
+  // Only this specific property access triggers re-renders
+  return <div>{query.data?.specificField}</div>
+}
+```
+
+### Reconciliation
+
+Solid Query uses SolidJS's `reconcile` for efficient updates:
+
+```tsx
+const query = useQuery(() => ({
+  queryKey: ['data'],
+  queryFn: fetchData,
+  // Customize reconciliation strategy
+  reconcile: 'id', // Use 'id' as the key for reconciliation
+}))
+```
+
+## Error Handling
+
+Handle errors with SolidJS's `ErrorBoundary`:
+
+```tsx
+import { ErrorBoundary } from 'solid-js'
+
+function App() {
+  return (
+    <ErrorBoundary fallback={(err) => <div>Error: {err.message}</div>}>
+      <Suspense fallback={<div>Loading...</div>}>
+        <DataComponent />
+      </Suspense>
+    </ErrorBoundary>
+  )
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/frameworks/solid/installation">
+    Install and configure Solid Query in your project
+  </Card>
+  <Card title="Quick Start" icon="rocket" href="/frameworks/solid/quick-start">
+    Build your first Solid Query application
+  </Card>
+  <Card title="TypeScript" icon="code" href="/frameworks/solid/typescript">
+    Learn about TypeScript support and type safety
+  </Card>
+  <Card title="DevTools" icon="wrench" href="/frameworks/solid/devtools">
+    Debug and visualize your queries with DevTools
+  </Card>
+</CardGroup>

@@ -1,0 +1,410 @@
+---
+title: Installation
+description: Install and configure Vue Query in your Vue application
+---
+
+# Installation
+
+Get started with Vue Query in your Vue 2 or Vue 3 application.
+
+## Package Installation
+
+<CodeGroup>
+
+```bash npm
+npm install @tanstack/vue-query
+```
+
+```bash pnpm
+pnpm add @tanstack/vue-query
+```
+
+```bash yarn
+yarn add @tanstack/vue-query
+```
+
+```bash bun
+bun add @tanstack/vue-query
+```
+
+</CodeGroup>
+
+## Vue Version Requirements
+
+Vue Query supports:
+
+- **Vue 3.3+**: Full support with Composition API
+- **Vue 2.7**: Built-in Composition API support
+- **Vue 2.6**: Requires `@vue/composition-api` plugin
+
+<Note>
+Vue Query uses `vue-demi` to provide compatibility across Vue 2 and Vue 3, allowing you to use the same API regardless of your Vue version.
+</Note>
+
+### Vue 2.6 Setup
+
+If you're using Vue 2.6, you must install the Composition API plugin:
+
+<CodeGroup>
+
+```bash npm
+npm install @vue/composition-api
+```
+
+```bash pnpm
+pnpm add @vue/composition-api
+```
+
+```bash yarn
+yarn add @vue/composition-api
+```
+
+</CodeGroup>
+
+## Plugin Configuration
+
+<Steps>
+
+### 1. Initialize the Plugin
+
+Register `VueQueryPlugin` to provide the QueryClient to your entire application:
+
+<CodeGroup>
+
+```typescript Vue 3
+import { createApp } from 'vue'
+import { VueQueryPlugin } from '@tanstack/vue-query'
+import App from './App.vue'
+
+const app = createApp(App)
+app.use(VueQueryPlugin)
+app.mount('#app')
+```
+
+```typescript Vue 2.7
+import Vue from 'vue'
+import { VueQueryPlugin } from '@tanstack/vue-query'
+import App from './App.vue'
+
+Vue.use(VueQueryPlugin)
+
+new Vue({
+  render: (h) => h(App),
+}).$mount('#app')
+```
+
+```typescript Vue 2.6
+import Vue from 'vue'
+import VueCompositionAPI from '@vue/composition-api'
+import { VueQueryPlugin } from '@tanstack/vue-query'
+import App from './App.vue'
+
+// Must install Composition API plugin first
+Vue.use(VueCompositionAPI)
+Vue.use(VueQueryPlugin)
+
+new Vue({
+  render: (h) => h(App),
+}).$mount('#app')
+```
+
+</CodeGroup>
+
+### 2. Configure Default Options (Optional)
+
+Customize default query and mutation behavior:
+
+```typescript
+import { createApp } from 'vue'
+import { VueQueryPlugin, QueryClient } from '@tanstack/vue-query'
+import App from './App.vue'
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 60 * 5, // 5 minutes
+      gcTime: 1000 * 60 * 10, // 10 minutes
+      refetchOnWindowFocus: false,
+      retry: 3,
+    },
+  },
+})
+
+const app = createApp(App)
+app.use(VueQueryPlugin, { queryClient })
+app.mount('#app')
+```
+
+### 3. Start Using Queries
+
+Use Vue Query hooks in your components:
+
+```vue
+<script setup>
+import { useQuery } from '@tanstack/vue-query'
+
+const { data, isLoading } = useQuery({
+  queryKey: ['todos'],
+  queryFn: () => fetch('/api/todos').then(res => res.json()),
+})
+</script>
+
+<template>
+  <div v-if="isLoading">Loading...</div>
+  <div v-else>{{ data }}</div>
+</template>
+```
+
+</Steps>
+
+## Configuration Options
+
+The `VueQueryPlugin` accepts several configuration options:
+
+### Using a Custom QueryClient
+
+```typescript
+import { VueQueryPlugin, QueryClient } from '@tanstack/vue-query'
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: Infinity,
+    },
+  },
+})
+
+app.use(VueQueryPlugin, {
+  queryClient,
+})
+```
+
+### Using QueryClientConfig
+
+Alternatively, pass configuration directly:
+
+```typescript
+app.use(VueQueryPlugin, {
+  queryClientConfig: {
+    defaultOptions: {
+      queries: {
+        staleTime: 1000 * 60 * 5,
+      },
+    },
+  },
+})
+```
+
+### Enable DevTools
+
+Enable Vue DevTools integration in development:
+
+```typescript
+app.use(VueQueryPlugin, {
+  queryClient,
+  enableDevtoolsV6Plugin: true,
+})
+```
+
+<Warning>
+DevTools are automatically disabled in production builds. The `enableDevtoolsV6Plugin` option only works in `development` mode.
+</Warning>
+
+### Custom Client Key
+
+Use a custom injection key for multiple QueryClient instances:
+
+```typescript
+app.use(VueQueryPlugin, {
+  queryClient: primaryClient,
+  queryClientKey: 'primary',
+})
+
+app.use(VueQueryPlugin, {
+  queryClient: secondaryClient,
+  queryClientKey: 'secondary',
+})
+
+// In components
+const primaryClient = useQueryClient('primary')
+const secondaryClient = useQueryClient('secondary')
+```
+
+### Client Persistence
+
+Persist and restore query cache using persisters:
+
+```typescript
+import { createSyncStoragePersister } from '@tanstack/query-sync-storage-persister'
+
+const persister = createSyncStoragePersister({
+  storage: window.localStorage,
+})
+
+app.use(VueQueryPlugin, {
+  queryClient,
+  clientPersister: (client) => {
+    const unsubscribe = persister.persistClient(client)
+    const restorePromise = persister.restoreClient(client)
+    
+    return [unsubscribe, restorePromise]
+  },
+  clientPersisterOnSuccess: (client) => {
+    console.log('Client restored successfully')
+  },
+})
+```
+
+## TypeScript Configuration
+
+For the best TypeScript experience, configure your `tsconfig.json`:
+
+```json tsconfig.json
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "skipLibCheck": false,
+    "types": ["@tanstack/vue-query"]
+  }
+}
+```
+
+<Tip>
+Vue Query has excellent TypeScript support with full type inference. See the [TypeScript guide](/frameworks/vue/typescript) for advanced patterns.
+</Tip>
+
+## Vite Configuration
+
+If you're using Vite, no additional configuration is needed. Vue Query works out of the box:
+
+```typescript vite.config.ts
+import { defineConfig } from 'vite'
+import vue from '@vitejs/plugin-vue'
+
+export default defineConfig({
+  plugins: [vue()],
+})
+```
+
+## Webpack Configuration
+
+For Webpack users with Vue 2, configure vue-demi aliasing:
+
+```javascript webpack.config.js
+module.exports = {
+  resolve: {
+    alias: {
+      vue: 'vue/dist/vue.esm.js',
+    },
+  },
+}
+```
+
+## Nuxt Configuration
+
+For Nuxt applications, create a plugin file:
+
+<CodeGroup>
+
+```typescript plugins/vue-query.ts (Nuxt 3)
+import { VueQueryPlugin, QueryClient } from '@tanstack/vue-query'
+
+export default defineNuxtPlugin((nuxtApp) => {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        staleTime: 5000,
+      },
+    },
+  })
+
+  nuxtApp.vueApp.use(VueQueryPlugin, { queryClient })
+})
+```
+
+```typescript plugins/vue-query.js (Nuxt 2)
+import Vue from 'vue'
+import { VueQueryPlugin, QueryClient } from '@tanstack/vue-query'
+
+const queryClient = new QueryClient()
+
+export default () => {
+  Vue.use(VueQueryPlugin, { queryClient })
+}
+```
+
+</CodeGroup>
+
+## Troubleshooting
+
+### "No 'queryClient' found in Vue context"
+
+This error occurs when `VueQueryPlugin` isn't installed:
+
+<Steps>
+
+1. Verify you've called `app.use(VueQueryPlugin)` before mounting
+2. Check that hooks are used inside `setup()` or within an active effect scope
+3. Ensure the plugin is installed at the root level, not in a child component
+
+</Steps>
+
+### "vue-query hooks can only be used inside setup()"
+
+Vue Query hooks must be called within:
+
+- Component `setup()` functions
+- `<script setup>` blocks
+- Active effect scopes created by `effectScope()`
+
+```vue
+<script setup>
+// ✅ Correct: Inside setup
+import { useQuery } from '@tanstack/vue-query'
+
+const query = useQuery({ queryKey: ['data'], queryFn: fetchData })
+</script>
+
+<script>
+export default {
+  setup() {
+    // ✅ Correct: Inside setup function
+    const query = useQuery({ queryKey: ['data'], queryFn: fetchData })
+    return { query }
+  },
+  
+  mounted() {
+    // ❌ Wrong: Outside setup
+    const query = useQuery({ queryKey: ['data'], queryFn: fetchData })
+  },
+}
+</script>
+```
+
+### Vue 2.6 Compatibility Issues
+
+If you encounter errors with Vue 2.6:
+
+1. Ensure `@vue/composition-api` is installed
+2. Install it **before** VueQueryPlugin
+3. Use version 1.7.2 or higher of `@vue/composition-api`
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="rocket" href="/frameworks/vue/quick-start">
+    Create your first query
+  </Card>
+  <Card title="TypeScript" icon="code" href="/frameworks/vue/typescript">
+    Set up type safety
+  </Card>
+  <Card title="DevTools" icon="bug" href="/frameworks/vue/devtools">
+    Install and use DevTools
+  </Card>
+  <Card title="Overview" icon="book" href="/frameworks/vue/overview">
+    Learn core concepts
+  </Card>
+</CardGroup>

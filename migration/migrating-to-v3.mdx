@@ -1,0 +1,738 @@
+---
+title: Migrating to React Query v3
+description: Complete migration guide for upgrading from v2 to v3 with breaking changes and new features
+---
+
+React Query v3 brings significant improvements, better SSR support, and many new features while refining the API based on community feedback.
+
+## Overview of Changes
+
+<CardGroup cols={2}>
+  <Card title="Architecture" icon="sitemap">
+    Scalable and testable cache configuration with separated QueryCache and MutationCache
+  </Card>
+
+  <Card title="SSR Support" icon="server">
+    Improved server-side rendering capabilities
+  </Card>
+
+  <Card title="Data Lag" icon="clock">
+    Keep previous data visible while new data loads (replaces usePaginatedQuery)
+  </Card>
+
+  <Card title="Bi-directional" icon="arrows-left-right">
+    Infinite queries can now paginate in both directions
+  </Card>
+
+  <Card title="Selectors" icon="filter">
+    Query data selectors for transformation and memoization
+  </Card>
+
+  <Card title="useQueries" icon="list">
+    New hook for variable-length parallel query execution
+  </Card>
+</CardGroup>
+
+## Breaking Changes
+
+### QueryCache Split into QueryClient and Caches
+
+The `QueryCache` has been split into `QueryClient`, `QueryCache`, and `MutationCache`:
+
+<CodeGroup>
+```typescript Before (v2)
+import { QueryCache } from 'react-query'
+
+const queryCache = new QueryCache()
+
+queryCache.prefetchQuery('todos', fetchTodos)
+```
+
+```typescript After (v3)
+import { QueryClient } from 'react-query'
+
+const queryClient = new QueryClient()
+
+queryClient.prefetchQuery('todos', fetchTodos)
+```
+</CodeGroup>
+
+**Benefits:**
+- Different types of caches
+- Multiple clients with different configurations can share the same cache
+- Cleaner API focused on general usage
+- Easier to test individual components
+
+### New QueryClientProvider
+
+<CodeGroup>
+```typescript Before (v2)
+import { ReactQueryCacheProvider, ReactQueryConfigProvider } from 'react-query'
+
+const queryCache = new QueryCache()
+
+function App() {
+  return (
+    <ReactQueryConfigProvider config={{ queries: { staleTime: 60000 } }}>
+      <ReactQueryCacheProvider queryCache={queryCache}>
+        <YourApp />
+      </ReactQueryCacheProvider>
+    </ReactQueryConfigProvider>
+  )
+}
+```
+
+```typescript After (v3)
+import { QueryClient, QueryClientProvider } from 'react-query'
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 60000,
+    },
+  },
+})
+
+function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <YourApp />
+    </QueryClientProvider>
+  )
+}
+```
+</CodeGroup>
+
+<Note>
+  Note the change from `defaultConfig` to `defaultOptions`.
+</Note>
+
+### Default QueryCache Removed
+
+<CodeGroup>
+```typescript Before (v2)
+import { useQuery } from 'react-query'
+
+// Uses default global cache
+function Component() {
+  const { data } = useQuery('todos', fetchTodos)
+}
+```
+
+```typescript After (v3)
+import { QueryClient, QueryClientProvider, useQuery } from 'react-query'
+
+const queryClient = new QueryClient()
+
+function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <Component />
+    </QueryClientProvider>
+  )
+}
+
+function Component() {
+  const { data } = useQuery('todos', fetchTodos)
+}
+```
+</CodeGroup>
+
+### `prefetchQuery` Changed
+
+<CodeGroup>
+```typescript Before (v2)
+const data = await queryCache.prefetchQuery('todos', fetchTodos)
+```
+
+```typescript After (v3)
+// prefetchQuery no longer returns data
+await queryClient.prefetchQuery('todos', fetchTodos)
+
+// Use fetchQuery to get data
+const data = await queryClient.fetchQuery('todos', fetchTodos)
+```
+</CodeGroup>
+
+### Error Boundaries
+
+<CodeGroup>
+```typescript Before (v2)
+import { ReactQueryErrorResetBoundary } from 'react-query'
+
+<ReactQueryErrorResetBoundary>
+  {({ reset }) => (
+    <ErrorBoundary onReset={reset}>
+      <App />
+    </ErrorBoundary>
+  )}
+</ReactQueryErrorResetBoundary>
+```
+
+```typescript After (v3)
+import { QueryErrorResetBoundary, useQueryErrorResetBoundary } from 'react-query'
+
+<QueryErrorResetBoundary>
+  {({ reset }) => (
+    <ErrorBoundary onReset={reset}>
+      <App />
+    </ErrorBoundary>
+  )}
+</QueryErrorResetBoundary>
+
+// Or use the hook
+function Component() {
+  const { reset } = useQueryErrorResetBoundary()
+  
+  return (
+    <ErrorBoundary onReset={reset}>
+      <App />
+    </ErrorBoundary>
+  )
+}
+```
+</CodeGroup>
+
+### Cache Methods Renamed
+
+<CodeGroup>
+```typescript Before (v2)
+queryCache.getQuery('todos')
+queryCache.getQueries(['todos'])
+```
+
+```typescript After (v3)
+queryCache.find(['todos'])
+queryCache.findAll(['todos'])
+```
+</CodeGroup>
+
+### `isFetching` is Now a Method
+
+<CodeGroup>
+```typescript Before (v2)
+const isFetching = queryCache.isFetching
+```
+
+```typescript After (v3)
+const isFetching = queryClient.isFetching()
+
+// Can also filter
+const isFetchingTodos = queryClient.isFetching(['todos'])
+```
+</CodeGroup>
+
+### `useQueryCache` → `useQueryClient`
+
+<CodeGroup>
+```typescript Before (v2)
+import { useQueryCache } from 'react-query'
+
+const queryCache = useQueryCache()
+```
+
+```typescript After (v3)
+import { useQueryClient } from 'react-query'
+
+const queryClient = useQueryClient()
+```
+</CodeGroup>
+
+### Query Functions No Longer Receive Split Parameters
+
+<CodeGroup>
+```typescript Before (v2)
+useQuery(['post', id], (_key, id) => fetchPost(id))
+```
+
+```typescript After (v3)
+// Use inline function (recommended)
+useQuery(['post', id], () => fetchPost(id))
+
+// Or use QueryFunctionContext
+useQuery(['post', id], (context) => fetchPost(context.queryKey[1]))
+```
+</CodeGroup>
+
+### Infinite Query Page Params
+
+<CodeGroup>
+```typescript Before (v2)
+useInfiniteQuery(
+  ['posts'],
+  (_key, pageParam = 0) => fetchPosts(pageParam)
+)
+```
+
+```typescript After (v3)
+useInfiniteQuery(
+  ['posts'],
+  ({ pageParam = 0 }) => fetchPosts(pageParam)
+)
+```
+</CodeGroup>
+
+### `usePaginatedQuery` Removed
+
+Use `keepPreviousData` option instead:
+
+<CodeGroup>
+```typescript Before (v2)
+import { usePaginatedQuery } from 'react-query'
+
+const { data, resolvedData } = usePaginatedQuery(['page', page], fetchPage)
+```
+
+```typescript After (v3)
+import { useQuery } from 'react-query'
+
+const { data } = useQuery(['page', page], fetchPage, {
+  keepPreviousData: true,
+})
+```
+</CodeGroup>
+
+### Infinite Queries are Bi-directional
+
+<CodeGroup>
+```typescript Before (v2)
+const {
+  data,
+  fetchMore,
+  canFetchMore,
+  isFetchingMore,
+} = useInfiniteQuery('projects', fetchProjects, {
+  getFetchMore: (lastPage) => lastPage.nextCursor,
+})
+
+if (data) {
+  return data.map((page) => page.data)
+}
+```
+
+```typescript After (v3)
+const {
+  data,
+  fetchNextPage,
+  hasNextPage,
+  isFetchingNextPage,
+} = useInfiniteQuery('projects', ({ pageParam = 0 }) => fetchProjects(pageParam), {
+  getNextPageParam: (lastPage) => lastPage.nextCursor,
+})
+
+if (data) {
+  return data.pages.map((page) => page.data)
+}
+```
+</CodeGroup>
+
+**Changes:**
+- `getFetchMore` → `getNextPageParam`
+- `canFetchMore` → `hasNextPage`
+- `fetchMore` → `fetchNextPage`
+- `isFetchingMore` → `isFetchingNextPage`
+- Added `getPreviousPageParam`, `hasPreviousPage`, `fetchPreviousPage`, `isFetchingPreviousPage`
+- Data is now `{ pages: [...], pageParams: [...] }`
+
+### `useMutation` Returns Object
+
+<CodeGroup>
+```typescript Before (v2)
+const [mutate, { status, reset }] = useMutation(addTodo)
+```
+
+```typescript After (v3)
+const { mutate, status, reset } = useMutation(addTodo)
+```
+</CodeGroup>
+
+### `mutate` No Longer Returns Promise
+
+<CodeGroup>
+```typescript Before (v2)
+const [mutate] = useMutation(addTodo)
+
+try {
+  const data = await mutate('todo')
+  console.log(data)
+} catch (error) {
+  console.error(error)
+}
+```
+
+```typescript After (v3)
+const { mutate, mutateAsync } = useMutation(addTodo)
+
+// Use callbacks
+mutate('todo', {
+  onSuccess: (data) => console.log(data),
+  onError: (error) => console.error(error),
+})
+
+// Or use mutateAsync
+try {
+  const data = await mutateAsync('todo')
+  console.log(data)
+} catch (error) {
+  console.error(error)
+}
+```
+</CodeGroup>
+
+### Query Options Collapsed
+
+<CodeGroup>
+```typescript Before (v2)
+useQuery({
+  queryKey: 'posts',
+  queryFn: fetchPosts,
+  config: { staleTime: Infinity },
+})
+```
+
+```typescript After (v3)
+useQuery({
+  queryKey: 'posts',
+  queryFn: fetchPosts,
+  staleTime: Infinity,
+})
+```
+</CodeGroup>
+
+### `enabled` Must Be Boolean
+
+<CodeGroup>
+```typescript Before (v2)
+useQuery('user', fetchUser, {
+  enabled: userId, // truthy/falsy
+})
+```
+
+```typescript After (v3)
+useQuery('user', fetchUser, {
+  enabled: Boolean(userId), // must be boolean
+})
+```
+</CodeGroup>
+
+### `initialStale` Option Removed
+
+Initial data now respects `staleTime`:
+
+<CodeGroup>
+```typescript Before (v2)
+useQuery('todos', fetchTodos, {
+  initialData: cachedTodos,
+  initialStale: true,
+})
+```
+
+```typescript After (v3)
+useQuery('todos', fetchTodos, {
+  initialData: cachedTodos,
+  staleTime: 0, // Refetch immediately
+})
+
+// Or don't refetch:
+useQuery('todos', fetchTodos, {
+  initialData: cachedTodos,
+  staleTime: Infinity,
+})
+```
+</CodeGroup>
+
+### `refetchOnMount` Scoped to Component
+
+<CodeGroup>
+```typescript Before (v2)
+// refetchOnMount: false affected all observers
+useQuery('todos', fetchTodos, { refetchOnMount: false })
+```
+
+```typescript After (v3)
+// refetchOnMount: false only affects this component
+useQuery('todos', fetchTodos, { refetchOnMount: false })
+```
+</CodeGroup>
+
+### `notifyOnStatusChange` Replaced
+
+<CodeGroup>
+```typescript Before (v2)
+useQuery('todos', fetchTodos, {
+  notifyOnStatusChange: false,
+})
+```
+
+```typescript After (v3)
+// Only re-render when specific properties change
+useQuery('todos', fetchTodos, {
+  notifyOnChangeProps: ['data', 'error'],
+})
+
+// Or exclude specific properties
+useQuery('todos', fetchTodos, {
+  notifyOnChangePropsExclusions: ['isStale'],
+})
+```
+</CodeGroup>
+
+### `clear()` Renamed to `remove()`
+
+<CodeGroup>
+```typescript Before (v2)
+const query = useQuery('todos', fetchTodos)
+query.clear()
+```
+
+```typescript After (v3)
+const query = useQuery('todos', fetchTodos)
+query.remove()
+```
+</CodeGroup>
+
+### `updatedAt` Split
+
+<CodeGroup>
+```typescript Before (v2)
+const { updatedAt } = useQuery('todos', fetchTodos)
+```
+
+```typescript After (v3)
+const { dataUpdatedAt, errorUpdatedAt } = useQuery('todos', fetchTodos)
+```
+</CodeGroup>
+
+### `setConsole()` Replaced
+
+<CodeGroup>
+```typescript Before (v2)
+import { setConsole } from 'react-query'
+
+setConsole({ log, warn, error })
+```
+
+```typescript After (v3)
+import { setLogger } from 'react-query'
+
+setLogger({ log, warn, error })
+
+// Works with Winston, Sentry, etc.
+```
+</CodeGroup>
+
+### React Native Auto-Configuration
+
+React Native error logging is now automatic (no need to override console).
+
+### TypeScript: `QueryStatus` is Union Type
+
+<CodeGroup>
+```typescript Before (v2)
+import { useQuery, QueryStatus } from 'react-query'
+
+const { status } = useQuery('todos', fetchTodos)
+
+if (status === QueryStatus.Loading) {
+  return <Spinner />
+}
+```
+
+```typescript After (v3)
+import { useQuery } from 'react-query'
+
+const { status } = useQuery('todos', fetchTodos)
+
+if (status === 'loading') {
+  return <Spinner />
+}
+```
+</CodeGroup>
+
+Enum values to string literals:
+- `QueryStatus.Idle` → `'idle'`
+- `QueryStatus.Loading` → `'loading'`
+- `QueryStatus.Error` → `'error'`
+- `QueryStatus.Success` → `'success'`
+
+## New Features
+
+### Query Data Selectors
+
+```typescript
+function User() {
+  const { data } = useQuery('user', fetchUser, {
+    select: (user) => user.username,
+  })
+  
+  return <div>Username: {data}</div>
+}
+```
+
+Combine with `notifyOnChangeProps` for optimal performance:
+
+```typescript
+useQuery('user', fetchUser, {
+  select: (user) => user.username,
+  notifyOnChangeProps: ['data', 'error'],
+})
+```
+
+### `useQueries` Hook
+
+```typescript
+const results = useQueries([
+  { queryKey: ['post', 1], queryFn: fetchPost },
+  { queryKey: ['post', 2], queryFn: fetchPost },
+])
+
+return (
+  <ul>
+    {results.map(({ data }) => (
+      data && <li key={data.id}>{data.title}</li>
+    ))}
+  </ul>
+)
+```
+
+### Mutation Retry & Offline Support
+
+```typescript
+const mutation = useMutation(addTodo, {
+  retry: 3,
+})
+
+// Mutations retry when device comes back online
+```
+
+### Persist Mutations
+
+Mutations can be persisted and resumed:
+
+```typescript
+import { persistQueryClient } from 'react-query/persistQueryClient-experimental'
+import { createWebStoragePersistor } from 'react-query/createWebStoragePersistor-experimental'
+
+const persister = createWebStoragePersistor({ storage: window.localStorage })
+
+persistQueryClient({
+  queryClient,
+  persister,
+})
+```
+
+### Query Observers
+
+Watch queries outside React:
+
+```typescript
+const observer = new QueryObserver(queryClient, { queryKey: 'posts' })
+
+const unsubscribe = observer.subscribe((result) => {
+  console.log(result)
+})
+```
+
+Also available:
+- `InfiniteQueryObserver`
+- `QueriesObserver`
+- `MutationObserver`
+
+### Pre-Configure Queries
+
+```typescript
+queryClient.setQueryDefaults('posts', { queryFn: fetchPosts })
+
+function Component() {
+  const { data } = useQuery('posts')
+}
+```
+
+### Pre-Configure Mutations
+
+```typescript
+queryClient.setMutationDefaults('addPost', { mutationFn: addPost })
+
+function Component() {
+  const { mutate } = useMutation({ mutationKey: 'addPost' })
+}
+```
+
+### `useIsFetching` with Filters
+
+```typescript
+const isFetchingPosts = useIsFetching(['posts'])
+
+if (isFetchingPosts) {
+  return <Spinner />
+}
+```
+
+### Core Separation
+
+Use React Query core without React:
+
+```typescript
+import { QueryClient } from 'react-query/core'
+
+const queryClient = new QueryClient()
+```
+
+### Devtools in Main Package
+
+<CodeGroup>
+```typescript Before (v2)
+import { ReactQueryDevtools } from 'react-query-devtools'
+```
+
+```typescript After (v3)
+import { ReactQueryDevtools } from 'react-query/devtools'
+```
+</CodeGroup>
+
+## Migration Checklist
+
+<Steps>
+  <Step title="Update QueryCache to QueryClient">
+    Replace all `QueryCache` instantiation with `QueryClient`.
+  </Step>
+
+  <Step title="Update Providers">
+    Replace `ReactQueryCacheProvider` and `ReactQueryConfigProvider` with `QueryClientProvider`.
+  </Step>
+
+  <Step title="Update Hook Names">
+    - `useQueryCache` → `useQueryClient`
+    - `usePaginatedQuery` → `useQuery` with `keepPreviousData`
+  </Step>
+
+  <Step title="Update Infinite Queries">
+    Rename properties and update to use `pages` data structure.
+  </Step>
+
+  <Step title="Update Mutations">
+    Change from array to object destructuring.
+  </Step>
+
+  <Step title="Update Query Function Signatures">
+    Use inline functions or `QueryFunctionContext`.
+  </Step>
+
+  <Step title="Update Options">
+    Flatten `config` into main options object.
+  </Step>
+
+  <Step title="Update Method Names">
+    - `getQuery` → `find`
+    - `getQueries` → `findAll`
+    - `clear` → `remove`
+  </Step>
+
+  <Step title="Test Everything">
+    Thoroughly test all queries, mutations, and cache interactions.
+  </Step>
+</Steps>
+
+<Note>
+  v3 represents a major evolution of React Query with better architecture, improved TypeScript support, and many powerful new features.
+</Note>

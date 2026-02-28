@@ -1,0 +1,240 @@
+---
+title: Infinite Queries
+description: Load paginated data progressively with infinite scrolling patterns
+---
+
+Infinite queries are useful for implementing "load more" and infinite scrolling features. They allow you to fetch pages of data progressively as the user scrolls or clicks a button.
+
+## Basic Usage
+
+Use `useInfiniteQuery` to fetch paginated data. The hook manages pages of data and provides methods to fetch more:
+
+```tsx
+import { useInfiniteQuery } from '@tanstack/react-query'
+
+function Projects() {
+  const {
+    data,
+    error,
+    fetchNextPage,
+    hasNextPage,
+    isFetching,
+    isFetchingNextPage,
+    status,
+  } = useInfiniteQuery({
+    queryKey: ['projects'],
+    queryFn: async ({ pageParam }) => {
+      const response = await fetch(`/api/projects?cursor=${pageParam}`)
+      return await response.json()
+    },
+    initialPageParam: 0,
+    getNextPageParam: (lastPage) => lastPage.nextId ?? undefined,
+  })
+
+  if (status === 'pending') return <p>Loading...</p>
+  if (status === 'error') return <p>Error: {error.message}</p>
+
+  return (
+    <>
+      {data.pages.map((page) => (
+        <React.Fragment key={page.nextId}>
+          {page.data.map((project) => (
+            <p key={project.id}>{project.name}</p>
+          ))}
+        </React.Fragment>
+      ))}
+      <button
+        onClick={() => fetchNextPage()}
+        disabled={!hasNextPage || isFetchingNextPage}
+      >
+        {isFetchingNextPage
+          ? 'Loading more...'
+          : hasNextPage
+            ? 'Load More'
+            : 'Nothing more to load'}
+      </button>
+    </>
+  )
+}
+```
+
+## Required Options
+
+<Steps>
+  <Step title="initialPageParam">
+    The initial page parameter passed to the query function. This is required and determines the starting point for your infinite query.
+
+    ```tsx
+    initialPageParam: 0
+    ```
+  </Step>
+
+  <Step title="getNextPageParam">
+    Function that receives the last page and returns the next page parameter. Return `undefined` or `null` when there are no more pages.
+
+    ```tsx
+    getNextPageParam: (lastPage) => lastPage.nextId ?? undefined
+    ```
+  </Step>
+</Steps>
+
+## Bidirectional Infinite Queries
+
+Fetch data in both directions by implementing both next and previous page parameters:
+
+```tsx
+const { 
+  data,
+  fetchNextPage,
+  fetchPreviousPage,
+  hasNextPage,
+  hasPreviousPage,
+  isFetchingNextPage,
+  isFetchingPreviousPage,
+} = useInfiniteQuery({
+  queryKey: ['projects'],
+  queryFn: async ({ pageParam }) => {
+    const response = await fetch(`/api/projects?cursor=${pageParam}`)
+    return await response.json()
+  },
+  initialPageParam: 0,
+  getPreviousPageParam: (firstPage) => firstPage.previousId ?? undefined,
+  getNextPageParam: (lastPage) => lastPage.nextId ?? undefined,
+})
+```
+
+<Note>
+  Both `getPreviousPageParam` and `getNextPageParam` receive the full list of pages and page parameters as additional arguments, allowing you to calculate the next parameter based on all loaded data.
+</Note>
+
+## Infinite Scroll Implementation
+
+Combine `useInfiniteQuery` with the Intersection Observer API for automatic infinite scrolling:
+
+```tsx
+import { useInfiniteQuery } from '@tanstack/react-query'
+import { useInView } from 'react-intersection-observer'
+import { useEffect } from 'react'
+
+function InfiniteList() {
+  const { ref, inView } = useInView()
+
+  const {
+    data,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery({
+    queryKey: ['projects'],
+    queryFn: async ({ pageParam }) => {
+      const response = await fetch(`/api/projects?cursor=${pageParam}`)
+      return await response.json()
+    },
+    initialPageParam: 0,
+    getNextPageParam: (lastPage) => lastPage.nextId,
+  })
+
+  useEffect(() => {
+    if (inView && hasNextPage && !isFetchingNextPage) {
+      fetchNextPage()
+    }
+  }, [inView, hasNextPage, isFetchingNextPage, fetchNextPage])
+
+  return (
+    <div>
+      {data?.pages.map((page) => (
+        <React.Fragment key={page.nextId}>
+          {page.data.map((project) => (
+            <div key={project.id}>{project.name}</div>
+          ))}
+        </React.Fragment>
+      ))}
+      <button
+        ref={ref}
+        onClick={() => fetchNextPage()}
+        disabled={!hasNextPage || isFetchingNextPage}
+      >
+        {isFetchingNextPage ? 'Loading...' : 'Load More'}
+      </button>
+    </div>
+  )
+}
+```
+
+<Tip>
+  Attach the `ref` to a sentinel element (like a button or div) at the bottom of your list. When it becomes visible, `inView` will be `true` and trigger the next page fetch.
+</Tip>
+
+## Limiting Maximum Pages
+
+Control memory usage by limiting the number of cached pages:
+
+```tsx
+const { data } = useInfiniteQuery({
+  queryKey: ['projects'],
+  queryFn: async ({ pageParam }) => {
+    const response = await fetch(`/api/projects?cursor=${pageParam}`)
+    return await response.json()
+  },
+  initialPageParam: 0,
+  getNextPageParam: (lastPage) => lastPage.nextId ?? undefined,
+  maxPages: 3, // Only keep 3 pages in memory
+})
+```
+
+<Warning>
+  When using `maxPages`, older pages will be removed from the cache as new pages are fetched. This helps prevent memory issues with very long lists.
+</Warning>
+
+## Data Structure
+
+The `data` object contains two properties:
+
+- `pages`: An array of page data objects
+- `pageParams`: An array of page parameters used to fetch each page
+
+```tsx
+interface InfiniteData<TData, TPageParam> {
+  pages: Array<TData>
+  pageParams: Array<TPageParam>
+}
+```
+
+## Query Function Context
+
+The query function receives a context object with the page parameter:
+
+```tsx
+queryFn: async ({ pageParam, signal, queryKey, meta }) => {
+  // pageParam: Current page parameter (from initialPageParam or getNextPageParam)
+  // signal: AbortSignal for request cancellation
+  // queryKey: The query key
+  // meta: Optional metadata
+  const response = await fetch(
+    `/api/projects?cursor=${pageParam}`,
+    { signal }
+  )
+  return await response.json()
+}
+```
+
+## Refetching Pages
+
+By default, refetching an infinite query will refetch all pages. You can customize this:
+
+```tsx
+// Refetch only the first page
+await queryClient.refetchQueries({
+  queryKey: ['projects'],
+  refetchPage: (page, index) => index === 0,
+})
+
+// Refetch all pages
+await queryClient.refetchQueries({
+  queryKey: ['projects'],
+})
+```
+
+<Note>
+  The `refetchPage` function receives the page data and index, allowing you to selectively refetch specific pages.
+</Note>

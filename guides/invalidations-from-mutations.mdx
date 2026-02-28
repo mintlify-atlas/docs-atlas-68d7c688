@@ -1,0 +1,355 @@
+---
+title: Query Invalidation from Mutations
+description: Learn how to invalidate and refetch queries after mutations to keep your UI synchronized
+---
+
+When you mutate data on the server, you need to update your client-side cache to reflect those changes. TanStack Query provides powerful tools for query invalidation that automatically refetch affected queries.
+
+## Basic Invalidation
+
+The most common pattern is to invalidate queries in the mutation's `onSuccess` or `onSettled` callback:
+
+```tsx
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+
+function AddTodo() {
+  const queryClient = useQueryClient()
+  
+  const mutation = useMutation({
+    mutationFn: async (newTodo) => {
+      const response = await fetch('/api/todos', {
+        method: 'POST',
+        body: JSON.stringify(newTodo),
+        headers: { 'Content-Type': 'application/json' },
+      })
+      return await response.json()
+    },
+    onSuccess: () => {
+      // Invalidate and refetch
+      queryClient.invalidateQueries({ queryKey: ['todos'] })
+    },
+  })
+  
+  return (
+    <button onClick={() => mutation.mutate({ text: 'New Todo' })}>
+      Add Todo
+    </button>
+  )
+}
+```
+
+<Note>
+`invalidateQueries` marks queries as stale and triggers a refetch if the query is currently being rendered.
+</Note>
+
+## onSuccess vs onSettled
+
+### onSuccess
+
+Invalidate only when the mutation succeeds:
+
+```tsx
+const mutation = useMutation({
+  mutationFn: createTodo,
+  onSuccess: () => {
+    queryClient.invalidateQueries({ queryKey: ['todos'] })
+  },
+})
+```
+
+### onSettled
+
+Invalidate whether the mutation succeeds or fails:
+
+```tsx
+const mutation = useMutation({
+  mutationFn: createTodo,
+  onSettled: () => {
+    // Refetch to ensure we're in sync with the server
+    queryClient.invalidateQueries({ queryKey: ['todos'] })
+  },
+})
+```
+
+<Tip>
+Use `onSettled` when you want to always refetch, even after errors. This is useful with optimistic updates to ensure the cache is correct.
+</Tip>
+
+## Invalidation Filters
+
+### Exact Matching
+
+Invalidate only exact query key matches:
+
+```tsx
+// Only invalidates ['todos']
+queryClient.invalidateQueries({
+  queryKey: ['todos'],
+  exact: true,
+})
+
+// Does NOT invalidate ['todos', { status: 'done' }]
+```
+
+### Prefix Matching
+
+Invalidate all queries that start with a key prefix:
+
+```tsx
+// Invalidates all todo-related queries:
+// ['todos']
+// ['todos', { status: 'done' }]
+// ['todos', 1]
+queryClient.invalidateQueries({
+  queryKey: ['todos'],
+})
+```
+
+### Predicate Filtering
+
+Use custom logic to determine which queries to invalidate:
+
+```tsx
+queryClient.invalidateQueries({
+  predicate: (query) => {
+    // Invalidate all queries with 'todos' in the key
+    return query.queryKey[0] === 'todos' && 
+           query.state.data?.length > 0
+  },
+})
+```
+
+## Multiple Query Invalidation
+
+Invalidate multiple related queries:
+
+```tsx
+const mutation = useMutation({
+  mutationFn: updateUser,
+  onSuccess: (data, variables) => {
+    // Invalidate user list
+    queryClient.invalidateQueries({ queryKey: ['users'] })
+    
+    // Invalidate specific user
+    queryClient.invalidateQueries({ 
+      queryKey: ['user', variables.userId] 
+    })
+    
+    // Invalidate user's posts
+    queryClient.invalidateQueries({ 
+      queryKey: ['posts', { userId: variables.userId }] 
+    })
+  },
+})
+```
+
+## Refetch Options
+
+Control how invalidated queries are refetched:
+
+```tsx
+// Don't refetch inactive queries
+queryClient.invalidateQueries({
+  queryKey: ['todos'],
+  refetchType: 'active', // default
+})
+
+// Refetch all matching queries, even inactive ones
+queryClient.invalidateQueries({
+  queryKey: ['todos'],
+  refetchType: 'all',
+})
+
+// Only mark as stale, don't refetch
+queryClient.invalidateQueries({
+  queryKey: ['todos'],
+  refetchType: 'none',
+})
+```
+
+<Warning>
+Refetching all queries (including inactive ones) can be expensive. Use `refetchType: 'active'` unless you have a specific reason.
+</Warning>
+
+## Awaiting Invalidation
+
+Wait for all invalidated queries to refetch:
+
+```tsx
+const mutation = useMutation({
+  mutationFn: createTodo,
+  onSuccess: async () => {
+    // Wait for queries to refetch before continuing
+    await queryClient.invalidateQueries({ queryKey: ['todos'] })
+    console.log('All todos queries have been refetched')
+  },
+})
+```
+
+## Mutation Context Pattern
+
+Use the context parameter in mutation callbacks:
+
+```tsx
+const mutation = useMutation({
+  mutationFn: createTodo,
+  onSuccess: (data, variables, context) => {
+    // Access the query client from context
+    context.queryClient.invalidateQueries({ queryKey: ['todos'] })
+  },
+})
+```
+
+## Real-World Example
+
+Complete example with auto-refetching after mutation:
+
+```tsx
+import React from 'react'
+import {
+  QueryClient,
+  QueryClientProvider,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query'
+
+const queryClient = new QueryClient()
+
+function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <Example />
+    </QueryClientProvider>
+  )
+}
+
+function Example() {
+  const queryClient = useQueryClient()
+  const [value, setValue] = React.useState('')
+
+  const { data, isFetching } = useQuery({
+    queryKey: ['todos'],
+    queryFn: async () => {
+      const response = await fetch('/api/data')
+      return await response.json()
+    },
+    refetchInterval: 1000, // Auto-refetch every second
+  })
+
+  const addMutation = useMutation({
+    mutationFn: (newTodo) => 
+      fetch('/api/data', {
+        method: 'POST',
+        body: JSON.stringify({ text: newTodo }),
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    onSuccess: () => {
+      // Invalidate to trigger immediate refetch
+      queryClient.invalidateQueries({ queryKey: ['todos'] })
+    },
+  })
+
+  return (
+    <div>
+      <h1>Auto Refetch</h1>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault()
+          addMutation.mutate(value, {
+            onSuccess: () => setValue(''),
+          })
+        }}
+      >
+        <input
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          placeholder="Enter something"
+        />
+        <button disabled={addMutation.isPending}>Add</button>
+      </form>
+      
+      <ul>
+        {data?.map((item) => (
+          <li key={item}>{item}</li>
+        ))}
+      </ul>
+      
+      {isFetching && (
+        <div style={{ color: 'green' }}>
+          Updating in background...
+        </div>
+      )}
+    </div>
+  )
+}
+```
+
+## Invalidation Without Refetch
+
+Sometimes you want to mark queries as stale without immediately refetching:
+
+```tsx
+// Mark as stale, will refetch on next mount/focus
+queryClient.invalidateQueries({
+  queryKey: ['todos'],
+  refetchType: 'none',
+})
+```
+
+## Query Removal
+
+Remove queries from the cache entirely:
+
+```tsx
+const mutation = useMutation({
+  mutationFn: deleteTodo,
+  onSuccess: (data, todoId) => {
+    // Remove specific query from cache
+    queryClient.removeQueries({ 
+      queryKey: ['todo', todoId],
+      exact: true,
+    })
+    
+    // Invalidate list to refetch
+    queryClient.invalidateQueries({ queryKey: ['todos'] })
+  },
+})
+```
+
+<Note>
+`removeQueries` completely removes the query from cache, while `invalidateQueries` marks it as stale but keeps the data.
+</Note>
+
+## Reset Queries
+
+Reset queries to their initial state:
+
+```tsx
+// Reset and refetch
+await queryClient.resetQueries({ queryKey: ['todos'] })
+
+// This is equivalent to:
+queryClient.removeQueries({ queryKey: ['todos'] })
+await queryClient.refetchQueries({ queryKey: ['todos'] })
+```
+
+## Best Practices
+
+<Steps>
+  <Step title="Use onSettled for optimistic updates">
+    Always invalidate in `onSettled` when using optimistic updates to ensure the cache is corrected even if the mutation fails.
+  </Step>
+  
+  <Step title="Invalidate broad, refetch narrow">
+    Invalidate all related queries broadly, but only active queries will refetch by default.
+  </Step>
+  
+  <Step title="Leverage query key structure">
+    Design your query keys hierarchically so you can easily invalidate related queries.
+  </Step>
+  
+  <Step title="Consider manual updates">
+    For simple mutations, updating the cache manually might be more efficient than invalidating.
+  </Step>
+</Steps>

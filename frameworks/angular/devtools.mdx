@@ -1,0 +1,502 @@
+---
+title: Angular Query DevTools
+description: Debug and visualize your queries with TanStack Query DevTools
+---
+
+Angular Query DevTools help you visualize all of the inner workings of TanStack Query and provide a better debugging experience. DevTools display active, inactive, and stale queries, along with their data and cache status.
+
+## Installation
+
+The DevTools are included as an optional peer dependency. Install them separately:
+
+<CodeGroup>
+
+```bash npm
+npm install @tanstack/query-devtools
+```
+
+```bash pnpm
+pnpm add @tanstack/query-devtools
+```
+
+```bash yarn
+yarn add @tanstack/query-devtools
+```
+
+```bash bun
+bun add @tanstack/query-devtools
+```
+
+</CodeGroup>
+
+<Note>
+The devtools package is listed as an `optionalDependency` in Angular Query, so you may see warnings during installation if you skip it. This is normal.
+</Note>
+
+## Basic Setup
+
+The easiest way to use DevTools is with `withDevtools()`, which automatically displays them in development mode:
+
+```typescript main.ts
+import { bootstrapApplication } from '@angular/platform-browser'
+import { 
+  provideTanStackQuery,
+  QueryClient,
+  withDevtools
+} from '@tanstack/angular-query-experimental'
+import { AppComponent } from './app/app.component'
+
+export const appConfig: ApplicationConfig = {
+  providers: [
+    provideTanStackQuery(
+      new QueryClient(),
+      withDevtools() // Enables devtools in development mode
+    )
+  ]
+}
+
+bootstrapApplication(AppComponent, appConfig)
+```
+
+<Steps>
+
+### How It Works
+
+1. DevTools are imported dynamically using code splitting
+2. They only load in development mode by default (`isDevMode()` is `true`)
+3. A floating button appears in the bottom-right corner of your app
+4. Click the button to open/close the DevTools panel
+
+### Development vs Production
+
+In production builds, `withDevtools()` provides a stub implementation that does nothing, ensuring zero bundle size impact.
+
+</Steps>
+
+## Configuration Options
+
+Customize DevTools behavior by passing options to `withDevtools()`:
+
+```typescript main.ts
+import { 
+  provideTanStackQuery,
+  QueryClient,
+  withDevtools,
+  isDevMode
+} from '@tanstack/angular-query-experimental'
+
+export const appConfig: ApplicationConfig = {
+  providers: [
+    provideTanStackQuery(
+      new QueryClient(),
+      withDevtools(() => ({
+        initialIsOpen: false,
+        buttonPosition: 'bottom-left',
+        position: 'bottom',
+        errorTypes: [{ name: 'Error', initializer: (value) => new Error(value) }],
+        loadDevtools: isDevMode() // Explicitly control loading
+      }))
+    )
+  ]
+}
+```
+
+### Available Options
+
+<ParamField path="initialIsOpen" type="boolean" default="false">
+  If `true`, the DevTools panel will be open by default when the page loads.
+</ParamField>
+
+<ParamField path="buttonPosition" type="'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'" default="'bottom-right'">
+  Position of the floating DevTools toggle button.
+</ParamField>
+
+<ParamField path="position" type="'top' | 'bottom' | 'left' | 'right'" default="'bottom'">
+  Side of the screen where the DevTools panel appears.
+</ParamField>
+
+<ParamField path="loadDevtools" type="boolean" default="isDevMode()">
+  Controls whether DevTools should load. By default, only loads in development mode.
+</ParamField>
+
+<ParamField path="client" type="QueryClient">
+  Optionally specify a different QueryClient. By default, uses the injected QueryClient.
+</ParamField>
+
+<ParamField path="errorTypes" type="ErrorType[]">
+  Configure error types for error filtering in DevTools.
+  
+  ```typescript
+  errorTypes: [
+    { name: 'Error', initializer: (value) => new Error(value) },
+    { name: 'CustomError', initializer: (value) => new CustomError(value) }
+  ]
+  ```
+</ParamField>
+
+## Reactive Configuration
+
+You can make DevTools options reactive by reading signals or other dependencies:
+
+```typescript main.ts
+import { InjectionToken } from '@angular/core'
+import { 
+  provideTanStackQuery,
+  QueryClient,
+  withDevtools
+} from '@tanstack/angular-query-experimental'
+
+// Create a config service
+export const DEV_CONFIG = new InjectionToken('DevConfig', {
+  factory: () => ({
+    showDevtools: true,
+    position: 'bottom' as const
+  })
+})
+
+export const appConfig: ApplicationConfig = {
+  providers: [
+    provideTanStackQuery(
+      new QueryClient(),
+      withDevtools(
+        (config = inject(DEV_CONFIG)) => ({
+          initialIsOpen: config.showDevtools,
+          position: config.position
+        }),
+        {
+          deps: [DEV_CONFIG] // Specify dependencies
+        }
+      )
+    )
+  ]
+}
+```
+
+## Advanced: DevTools Panel
+
+For more control, use `injectDevtoolsPanel` to manually render DevTools in your own component:
+
+```typescript devtools.component.ts
+import { Component, ElementRef, viewChild } from '@angular/core'
+import { injectDevtoolsPanel } from '@tanstack/angular-query-experimental/devtools-panel'
+
+@Component({
+  selector: 'app-devtools',
+  standalone: true,
+  template: `
+    <div class="devtools-container">
+      <div class="devtools-header">
+        <h2>Query DevTools</h2>
+        <button (click)="closeDevtools()">Close</button>
+      </div>
+      <div #devtoolsHost class="devtools-host"></div>
+    </div>
+  `,
+  styles: [`
+    .devtools-container {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+    }
+    
+    .devtools-header {
+      padding: 1rem;
+      background: #1a1a1a;
+      color: white;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    
+    .devtools-host {
+      flex: 1;
+      overflow: auto;
+    }
+  `]
+})
+export class DevToolsComponent {
+  devtoolsHost = viewChild.required<ElementRef>('devtoolsHost')
+  
+  devtoolsRef = injectDevtoolsPanel(() => ({
+    hostElement: this.devtoolsHost()
+  }))
+  
+  closeDevtools() {
+    this.devtoolsRef.destroy()
+  }
+}
+```
+
+### DevTools Panel Options
+
+<ParamField path="hostElement" type="ElementRef" required>
+  The DOM element where DevTools will be rendered.
+</ParamField>
+
+<ParamField path="client" type="QueryClient">
+  The QueryClient instance to monitor. Defaults to the injected client.
+</ParamField>
+
+<ParamField path="errorTypes" type="ErrorType[]">
+  Error types for filtering.
+</ParamField>
+
+<ParamField path="styleNonce" type="string">
+  CSP nonce for inline styles.
+</ParamField>
+
+<ParamField path="shadowDOMTarget" type="ShadowRoot">
+  Render DevTools in a Shadow DOM.
+</ParamField>
+
+<ParamField path="onClose" type="() => void">
+  Callback when DevTools panel is closed.
+</ParamField>
+
+### Using in Your Own DevTools
+
+You can embed TanStack Query DevTools inside your own custom DevTools UI:
+
+```typescript custom-devtools.component.ts
+import { Component, ElementRef, signal, viewChild } from '@angular/core'
+import { injectDevtoolsPanel } from '@tanstack/angular-query-experimental/devtools-panel'
+
+@Component({
+  selector: 'app-custom-devtools',
+  standalone: true,
+  template: `
+    <div class="custom-devtools">
+      <nav>
+        <button 
+          [class.active]="activeTab() === 'network'"
+          (click)="activeTab.set('network')">
+          Network
+        </button>
+        <button 
+          [class.active]="activeTab() === 'query'"
+          (click)="activeTab.set('query')">
+          Query Cache
+        </button>
+        <button 
+          [class.active]="activeTab() === 'console'"
+          (click)="activeTab.set('console')">
+          Console
+        </button>
+      </nav>
+      
+      <div class="tab-content">
+        @if (activeTab() === 'network') {
+          <div>Network tab content</div>
+        }
+        @if (activeTab() === 'query') {
+          <div #queryDevtools></div>
+        }
+        @if (activeTab() === 'console') {
+          <div>Console tab content</div>
+        }
+      </div>
+    </div>
+  `,
+  styles: [`
+    .custom-devtools {
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+    }
+    
+    nav {
+      display: flex;
+      background: #2a2a2a;
+      border-bottom: 1px solid #444;
+    }
+    
+    nav button {
+      padding: 0.75rem 1.5rem;
+      background: transparent;
+      border: none;
+      color: #999;
+      cursor: pointer;
+    }
+    
+    nav button.active {
+      color: white;
+      border-bottom: 2px solid #007acc;
+    }
+    
+    .tab-content {
+      flex: 1;
+      overflow: auto;
+    }
+  `]
+})
+export class CustomDevToolsComponent {
+  activeTab = signal<'network' | 'query' | 'console'>('network')
+  queryDevtools = viewChild<ElementRef>('queryDevtools')
+  
+  devtoolsRef = injectDevtoolsPanel(() => ({
+    hostElement: this.queryDevtools(),
+    onClose: () => {
+      // Handle close if needed
+    }
+  }))
+}
+```
+
+## Forcing Production Build
+
+If you need to load DevTools in production (not recommended), import from the production entry point:
+
+```typescript main.ts
+import { 
+  provideTanStackQuery,
+  QueryClient
+} from '@tanstack/angular-query-experimental'
+import { withDevtools } from '@tanstack/angular-query-experimental/devtools/production'
+
+export const appConfig: ApplicationConfig = {
+  providers: [
+    provideTanStackQuery(
+      new QueryClient(),
+      withDevtools(() => ({
+        loadDevtools: true // Will load even in production
+      }))
+    )
+  ]
+}
+```
+
+<Warning>
+Loading DevTools in production adds ~40KB to your bundle. Only do this for internal tools or staging environments.
+</Warning>
+
+## DevTools Features
+
+Once DevTools are open, you can:
+
+### Query List
+
+- View all queries with their keys, status, and timestamps
+- Filter queries by status (fresh, fetching, stale, inactive)
+- Search queries by key
+- See query dependencies and relationships
+
+### Query Details
+
+Click a query to see:
+
+- **Data**: The current cached data (formatted JSON)
+- **Query Info**: Status, timestamps, fetch count, error count
+- **Observers**: Number of components watching this query
+- **Actions**: Manually refetch, invalidate, or remove the query
+
+### Mutation Tracking
+
+- View active and recent mutations
+- See mutation status and variables
+- Track mutation history
+
+### Cache Management
+
+- View total cache size
+- See garbage collection status
+- Manually clear the entire cache
+
+## Troubleshooting
+
+### DevTools Not Appearing
+
+<Steps>
+
+### Check Installation
+
+Ensure `@tanstack/query-devtools` is installed:
+
+```bash
+npm list @tanstack/query-devtools
+```
+
+### Verify Configuration
+
+Make sure `withDevtools()` is passed to `provideTanStackQuery`:
+
+```typescript
+provideTanStackQuery(
+  new QueryClient(),
+  withDevtools() // This line
+)
+```
+
+### Check Development Mode
+
+By default, DevTools only load when `isDevMode()` returns `true`. To force loading:
+
+```typescript
+withDevtools(() => ({
+  loadDevtools: true
+}))
+```
+
+### Browser Console
+
+Check for errors in the browser console. Common issues:
+- "Cannot find module '@tanstack/query-devtools'" - Package not installed
+- CSP violations - Add style-src 'unsafe-inline' or use `styleNonce`
+
+</Steps>
+
+### DevTools Panel Is Empty
+
+If the DevTools panel opens but shows no queries:
+
+1. Ensure you've created at least one query using `injectQuery`
+2. Check that the correct `QueryClient` is being used
+3. Try triggering a query manually to see if it appears
+
+### Performance Issues
+
+If DevTools slow down your application:
+
+1. Close DevTools when not actively debugging
+2. Consider using `injectDevtoolsPanel` to render in a separate window
+3. Reduce the number of queries or use query cancellation
+
+## Best Practices
+
+<Tip>
+Leave DevTools enabled during development for the best debugging experience. They're automatically excluded from production builds.
+</Tip>
+
+1. **Use Descriptive Query Keys**: Makes it easier to find queries in DevTools
+   ```typescript
+   // Good
+   queryKey: ['users', 'list', { page: 1, filter: 'active' }]
+   
+   // Bad
+   queryKey: ['data']
+   ```
+
+2. **Monitor Cache Size**: Use DevTools to identify queries that cache too much data
+
+3. **Track Refetch Patterns**: Watch for queries that refetch too frequently
+
+4. **Debug Stale Data**: Use DevTools to understand when queries become stale
+
+5. **Test Error States**: Use DevTools actions to trigger refetches and test error handling
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Queries Guide" icon="database" href="/frameworks/angular/guides/queries">
+    Learn advanced query patterns
+  </Card>
+  <Card title="Testing" icon="flask" href="/frameworks/angular/guides/testing">
+    Test your queries effectively
+  </Card>
+  <Card title="SSR" icon="server" href="/frameworks/angular/guides/ssr">
+    Server-side rendering with Angular Query
+  </Card>
+  <Card title="API Reference" icon="book" href="/frameworks/angular/reference/withDevtools">
+    Complete DevTools API
+  </Card>
+</CardGroup>

@@ -1,0 +1,272 @@
+---
+title: Vue Query Overview
+description: Powerful data synchronization for Vue applications with hooks for fetching, caching, and updating asynchronous data
+---
+
+# Vue Query Overview
+
+Vue Query provides hooks for fetching, caching, and updating asynchronous data in Vue applications. It's built on top of TanStack Query's framework-agnostic core and provides a Vue-specific API with full support for Vue's reactivity system.
+
+## Key Features
+
+Vue Query brings powerful data management capabilities to your Vue applications:
+
+- **Transport/Protocol Agnostic**: Works with REST, GraphQL, promises, or any async data source
+- **Automatic Caching**: Smart caching with configurable stale-while-revalidate strategies
+- **Auto Refetching**: Refetch on window focus, network reconnect, polling, or custom intervals
+- **Parallel & Dependent Queries**: Execute multiple queries simultaneously or chain them together
+- **Mutations with Optimistic Updates**: Update data with automatic query invalidation and rollback
+- **Infinite Scroll Support**: Built-in support for paginated and cursor-based queries
+- **Request Cancellation**: Automatic cancellation of outdated requests
+- **SSR Support**: Server-side rendering with hydration/dehydration
+- **Vue DevTools Integration**: Debug your queries with the official Vue DevTools plugin
+- **Vue 2 & 3 Support**: Works with Vue 2.6+, 2.7, and Vue 3 via vue-demi
+
+## Vue Reactivity Integration
+
+Vue Query is designed to work seamlessly with Vue's reactivity system:
+
+```vue
+<script setup>
+import { ref, computed } from 'vue'
+import { useQuery } from '@tanstack/vue-query'
+
+const userId = ref(1)
+const enabled = ref(true)
+
+// Query options are reactive - changes trigger refetching
+const { data, isLoading, error } = useQuery({
+  queryKey: ['user', userId],
+  queryFn: () => fetchUser(userId.value),
+  enabled, // Reactive enable/disable
+})
+
+// Computed values work too
+const queryKey = computed(() => ['user', userId.value])
+</script>
+
+<template>
+  <div v-if="isLoading">Loading...</div>
+  <div v-else-if="error">Error: {{ error.message }}</div>
+  <div v-else>{{ data.name }}</div>
+</template>
+```
+
+## Core Concepts
+
+### Queries
+
+Queries are declarative dependencies on asynchronous data sources. Use `useQuery` to fetch and cache data:
+
+```typescript
+import { useQuery } from '@tanstack/vue-query'
+
+const { data, isLoading, error, refetch } = useQuery({
+  queryKey: ['todos'],
+  queryFn: fetchTodos,
+})
+```
+
+### Mutations
+
+Mutations are used to create, update, or delete data:
+
+```typescript
+import { useMutation, useQueryClient } from '@tanstack/vue-query'
+
+const queryClient = useQueryClient()
+
+const { mutate, isPending } = useMutation({
+  mutationFn: createTodo,
+  onSuccess: () => {
+    // Invalidate and refetch
+    queryClient.invalidateQueries({ queryKey: ['todos'] })
+  },
+})
+```
+
+### Query Invalidation
+
+Invalidate queries to mark them as stale and trigger refetching:
+
+```typescript
+import { useQueryClient } from '@tanstack/vue-query'
+
+const queryClient = useQueryClient()
+
+// Invalidate all queries starting with 'todos'
+queryClient.invalidateQueries({ queryKey: ['todos'] })
+
+// Invalidate exact query
+queryClient.invalidateQueries({ queryKey: ['todos', 1], exact: true })
+```
+
+## Architecture
+
+<Steps>
+
+### 1. Install the Plugin
+
+Initialize Vue Query with the `VueQueryPlugin` to provide the QueryClient to your app:
+
+```typescript
+import { createApp } from 'vue'
+import { VueQueryPlugin } from '@tanstack/vue-query'
+import App from './App.vue'
+
+const app = createApp(App)
+app.use(VueQueryPlugin)
+app.mount('#app')
+```
+
+### 2. Use Query Hooks
+
+Use `useQuery`, `useMutation`, and other hooks in your components:
+
+```vue
+<script setup>
+import { useQuery } from '@tanstack/vue-query'
+
+const { data } = useQuery({
+  queryKey: ['todos'],
+  queryFn: fetchTodos,
+})
+</script>
+```
+
+### 3. Access the QueryClient
+
+Use `useQueryClient` to access the client instance for advanced operations:
+
+```typescript
+import { useQueryClient } from '@tanstack/vue-query'
+
+const queryClient = useQueryClient()
+queryClient.invalidateQueries({ queryKey: ['todos'] })
+```
+
+</Steps>
+
+## Comparison with Other Solutions
+
+### vs Pinia/Vuex
+
+Vue Query is specifically designed for **asynchronous server state**, while Pinia and Vuex excel at **client-side state management**. They solve different problems:
+
+| Feature | Vue Query | Pinia/Vuex |
+|---------|-----------|------------|
+| Server State | ✅ Automatic caching, refetching, synchronization | ❌ Manual implementation required |
+| Client State | ❌ Use refs/reactive | ✅ Perfect for UI state, preferences |
+| Caching | ✅ Built-in with TTL | ❌ Manual |
+| Loading States | ✅ Automatic | ❌ Manual |
+| Optimistic Updates | ✅ Built-in | ❌ Manual |
+| Devtools | ✅ Dedicated devtools | ✅ Vue DevTools |
+
+<Tip>
+Use Vue Query for server data and Pinia for client state. They complement each other perfectly!
+</Tip>
+
+### vs Apollo Client
+
+Vue Query is protocol-agnostic while Apollo is GraphQL-specific:
+
+- **Vue Query**: Works with any async data source (REST, GraphQL, etc.)
+- **Apollo Client**: Deeply integrated with GraphQL, includes code generation
+
+<Note>
+If you're exclusively using GraphQL, Apollo provides GraphQL-specific features like fragments and schema integration. For REST or mixed APIs, Vue Query is more flexible.
+</Note>
+
+## Vue 2 Support
+
+Vue Query supports Vue 2.6+ through the `vue-demi` compatibility layer:
+
+<Warning>
+For Vue 2.6, you must install `@vue/composition-api`:
+
+```bash
+npm install @vue/composition-api
+```
+
+Vue 2.7 includes the Composition API, so no additional package is needed.
+</Warning>
+
+```typescript
+// Vue 2.6 with @vue/composition-api
+import Vue from 'vue'
+import VueCompositionAPI from '@vue/composition-api'
+import { VueQueryPlugin } from '@tanstack/vue-query'
+
+Vue.use(VueCompositionAPI)
+Vue.use(VueQueryPlugin)
+```
+
+## Framework Features
+
+Vue Query leverages Vue-specific features:
+
+### Shallow Refs
+
+Improve performance for large datasets with shallow reactivity:
+
+```typescript
+const { data } = useQuery({
+  queryKey: ['todos'],
+  queryFn: fetchTodos,
+  shallow: true, // Use shallowRef instead of ref
+})
+```
+
+### Scope Disposal
+
+Queries automatically clean up when the component unmounts:
+
+```typescript
+import { onScopeDispose } from 'vue'
+
+// Manual cleanup example
+const unsubscribe = queryClient.getQueryCache().subscribe()
+onScopeDispose(unsubscribe)
+```
+
+<Note>
+Vue Query automatically handles cleanup using `onScopeDispose`, so you rarely need to manage it manually.
+</Note>
+
+## TypeScript Support
+
+Vue Query is written in TypeScript and provides full type safety:
+
+```typescript
+import { useQuery } from '@tanstack/vue-query'
+import type { User } from './types'
+
+const { data } = useQuery({
+  queryKey: ['user', 1],
+  queryFn: async (): Promise<User> => {
+    const response = await fetch('/api/user/1')
+    return response.json()
+  },
+})
+
+// data is typed as Ref<User | undefined>
+```
+
+See the [TypeScript guide](/frameworks/vue/typescript) for advanced type patterns.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/frameworks/vue/installation">
+    Install Vue Query and set up the plugin
+  </Card>
+  <Card title="Quick Start" icon="rocket" href="/frameworks/vue/quick-start">
+    Build your first query in minutes
+  </Card>
+  <Card title="TypeScript" icon="code" href="/frameworks/vue/typescript">
+    Learn about type safety and inference
+  </Card>
+  <Card title="DevTools" icon="bug" href="/frameworks/vue/devtools">
+    Debug queries with Vue DevTools integration
+  </Card>
+</CardGroup>

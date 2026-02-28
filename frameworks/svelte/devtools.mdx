@@ -1,0 +1,506 @@
+---
+title: DevTools
+description: Debug and visualize your Svelte Query cache with the official DevTools
+---
+
+The Svelte Query DevTools help you visualize all of the inner workings of Svelte Query and will likely save you hours of debugging if you find yourself in a pinch.
+
+## Installation
+
+<Steps>
+  <Step title="Install the package">
+    Install the DevTools package as a dev dependency:
+
+    <CodeGroup>
+      ```bash npm
+      npm install -D @tanstack/svelte-query-devtools
+      ```
+
+      ```bash pnpm
+      pnpm add -D @tanstack/svelte-query-devtools
+      ```
+
+      ```bash yarn
+      yarn add -D @tanstack/svelte-query-devtools
+      ```
+
+      ```bash bun
+      bun add -D @tanstack/svelte-query-devtools
+      ```
+    </CodeGroup>
+
+    <Note>
+      The DevTools package version is `6.0.4` and is compatible with `@tanstack/svelte-query` 6.0.0+.
+    </Note>
+  </Step>
+
+  <Step title="Import and add to your app">
+    Add the `SvelteQueryDevtools` component to your root layout:
+
+    ```svelte +layout.svelte
+    <script lang="ts">
+    import { QueryClient, QueryClientProvider } from '@tanstack/svelte-query'
+    import { SvelteQueryDevtools } from '@tanstack/svelte-query-devtools'
+
+    const queryClient = new QueryClient()
+    const { children } = $props()
+    </script>
+
+    <QueryClientProvider client={queryClient}>
+      {@render children()}
+      <SvelteQueryDevtools />
+    </QueryClientProvider>
+    ```
+
+    <Tip>
+      Place the DevTools component anywhere inside the `QueryClientProvider`. It's common to put it at the end of your layout.
+    </Tip>
+  </Step>
+
+  <Step title="Start your app">
+    The DevTools will now appear in your app during development. They are automatically removed from production builds.
+
+    ```bash
+    npm run dev
+    ```
+  </Step>
+</Steps>
+
+## Features
+
+The Svelte Query DevTools provide powerful debugging capabilities:
+
+### Query Explorer
+
+View all queries in your application:
+
+- **Active queries** - Currently mounted and in use
+- **Inactive queries** - Cached but not mounted
+- **Stale queries** - Data that needs refetching
+- **Fresh queries** - Recently fetched data
+
+### Query Inspector
+
+Click on any query to see detailed information:
+
+- Query key
+- Query status (pending, error, success)
+- Last updated timestamp
+- Data preview
+- Query configuration
+- Observers count
+- Query tags
+
+### Mutation Inspector
+
+Track all mutations in your app:
+
+- Mutation status
+- Variables passed to mutation
+- Mutation response data
+- Error information
+
+### Actions
+
+Perform actions on queries:
+
+- **Refetch** - Manually trigger a refetch
+- **Invalidate** - Mark query as stale
+- **Remove** - Remove query from cache
+- **Reset** - Reset error state
+
+## Configuration
+
+Customize the DevTools appearance and behavior:
+
+```svelte +layout.svelte
+<script lang="ts">
+import { SvelteQueryDevtools } from '@tanstack/svelte-query-devtools'
+
+const queryClient = new QueryClient()
+</script>
+
+<QueryClientProvider client={queryClient}>
+  {@render children()}
+  
+  <SvelteQueryDevtools
+    initialIsOpen={false}
+    buttonPosition="bottom-right"
+    position="bottom"
+    client={queryClient}
+  />
+</QueryClientProvider>
+```
+
+### Options
+
+<ParamField path="initialIsOpen" type="boolean" default="false">
+  Set to `true` to have the DevTools open by default on page load.
+
+  ```svelte
+  <SvelteQueryDevtools initialIsOpen={true} />
+  ```
+</ParamField>
+
+<ParamField path="buttonPosition" type="string" default="bottom-right">
+  Position of the toggle button. Options: `'top-left'`, `'top-right'`, `'bottom-left'`, `'bottom-right'`.
+
+  ```svelte
+  <SvelteQueryDevtools buttonPosition="top-left" />
+  ```
+</ParamField>
+
+<ParamField path="position" type="string" default="bottom">
+  Position of the DevTools panel. Options: `'top'`, `'bottom'`, `'left'`, `'right'`.
+
+  ```svelte
+  <SvelteQueryDevtools position="right" />
+  ```
+</ParamField>
+
+<ParamField path="client" type="QueryClient" default="useQueryClient()">
+  Custom QueryClient instance. By default, uses the client from context.
+
+  ```svelte
+  <SvelteQueryDevtools client={customQueryClient} />
+  ```
+</ParamField>
+
+<ParamField path="errorTypes" type="Array<DevtoolsErrorType>" default="[]">
+  Custom error types to display in the DevTools.
+
+  ```svelte
+  <SvelteQueryDevtools
+    errorTypes={[
+      { name: 'ValidationError', initializer: (data) => data },
+    ]}
+  />
+  ```
+</ParamField>
+
+<ParamField path="styleNonce" type="string">
+  Nonce for Content Security Policy (CSP). Used for inline styles.
+
+  ```svelte
+  <SvelteQueryDevtools styleNonce="random-nonce-123" />
+  ```
+</ParamField>
+
+<ParamField path="shadowDOMTarget" type="ShadowRoot">
+  Attach DevTools styles to a specific Shadow DOM target.
+
+  ```svelte
+  <SvelteQueryDevtools shadowDOMTarget={shadowRoot} />
+  ```
+</ParamField>
+
+<ParamField path="hideDisabledQueries" type="boolean" default="false">
+  Hide disabled queries from the query list.
+
+  ```svelte
+  <SvelteQueryDevtools hideDisabledQueries={true} />
+  ```
+</ParamField>
+
+## Usage Examples
+
+### Basic Setup
+
+The simplest configuration:
+
+```svelte +layout.svelte
+<script lang="ts">
+import { QueryClient, QueryClientProvider } from '@tanstack/svelte-query'
+import { SvelteQueryDevtools } from '@tanstack/svelte-query-devtools'
+
+const queryClient = new QueryClient()
+const { children } = $props()
+</script>
+
+<QueryClientProvider client={queryClient}>
+  {@render children()}
+  <SvelteQueryDevtools />
+</QueryClientProvider>
+```
+
+### Custom Position
+
+Position the DevTools on the right side:
+
+```svelte
+<SvelteQueryDevtools
+  position="right"
+  buttonPosition="bottom-right"
+/>
+```
+
+### Open by Default
+
+Useful during development:
+
+```svelte
+<SvelteQueryDevtools
+  initialIsOpen={true}
+  position="bottom"
+/>
+```
+
+### With SvelteKit
+
+Only show DevTools in development:
+
+```svelte +layout.svelte
+<script lang="ts">
+import { dev } from '$app/environment'
+import { QueryClient, QueryClientProvider } from '@tanstack/svelte-query'
+import { SvelteQueryDevtools } from '@tanstack/svelte-query-devtools'
+
+const queryClient = new QueryClient()
+const { children } = $props()
+</script>
+
+<QueryClientProvider client={queryClient}>
+  {@render children()}
+  {#if dev}
+    <SvelteQueryDevtools />
+  {/if}
+</QueryClientProvider>
+```
+
+<Note>
+  The DevTools are automatically tree-shaken from production builds, but you can add an explicit check for clarity.
+</Note>
+
+## DevTools Interface
+
+### Query States
+
+Queries are color-coded by state:
+
+- **Green** - Fresh data (within `staleTime`)
+- **Yellow** - Stale data (needs refetch)
+- **Gray** - Inactive (cached but not mounted)
+- **Blue** - Fetching (currently refetching)
+- **Red** - Error state
+
+### Filter Queries
+
+Use the search bar to filter queries:
+
+```
+// Filter by query key
+posts
+
+// Filter by status
+status:stale
+
+// Filter by observer count
+observers:>0
+```
+
+### Sort Queries
+
+Sort queries by:
+
+- Query key
+- Last updated
+- Observer count
+- Status
+
+## Debugging Tips
+
+<Steps>
+  <Step title="Inspect query keys">
+    Click on a query to see its full query key structure. This helps ensure your keys are unique and properly structured.
+
+    ```typescript
+    // Good query key structure
+    ['posts', { status: 'published', author: 1 }]
+
+    // Query key visible in DevTools
+    ```
+  </Step>
+
+  <Step title="Monitor refetch behavior">
+    Watch the "Last Updated" timestamp to see when queries refetch. This helps debug issues with:
+    - `staleTime` configuration
+    - Window focus refetching
+    - Interval refetching
+  </Step>
+
+  <Step title="Check observer count">
+    The observer count shows how many components are using a query. If it's 0, the query is inactive and may be garbage collected.
+  </Step>
+
+  <Step title="Inspect error states">
+    When a query fails, click on it to see:
+    - Error message
+    - Error stack trace
+    - Failed query configuration
+    - Retry count
+  </Step>
+</Steps>
+
+## Advanced Features
+
+### Custom Error Types
+
+Display custom error information:
+
+```svelte
+<script lang="ts">
+import type { DevtoolsErrorType } from '@tanstack/query-devtools'
+
+const errorTypes: DevtoolsErrorType[] = [
+  {
+    name: 'ApiError',
+    initializer: (error: any) => ({
+      message: error.message,
+      statusCode: error.statusCode,
+      endpoint: error.endpoint,
+    }),
+  },
+]
+</script>
+
+<SvelteQueryDevtools {errorTypes} />
+```
+
+### Shadow DOM Integration
+
+For apps using Shadow DOM:
+
+```svelte
+<script lang="ts">
+import { onMount } from 'svelte'
+
+let shadowRoot: ShadowRoot
+
+onMount(() => {
+  const host = document.getElementById('app')
+  shadowRoot = host?.shadowRoot
+})
+</script>
+
+<SvelteQueryDevtools shadowDOMTarget={shadowRoot} />
+```
+
+### CSP Nonce Support
+
+For Content Security Policy compliance:
+
+```svelte
+<script lang="ts">
+const nonce = 'random-nonce-value'
+</script>
+
+<SvelteQueryDevtools styleNonce={nonce} />
+```
+
+## Performance
+
+The DevTools are designed to have minimal performance impact:
+
+- **Lazy loaded** - Only imported when used
+- **Development only** - Automatically removed in production
+- **Efficient updates** - Only re-renders when query state changes
+- **Virtual scrolling** - Handles thousands of queries efficiently
+
+<Warning>
+  While the DevTools are optimized, having hundreds of active queries may slow down the interface. Consider using query filters or `hideDisabledQueries` in such cases.
+</Warning>
+
+## Keyboard Shortcuts
+
+Use keyboard shortcuts for faster navigation:
+
+- `Cmd/Ctrl + K` - Toggle DevTools
+- `/` - Focus search
+- `↑/↓` - Navigate queries
+- `Enter` - Open selected query
+- `Esc` - Close query detail
+
+## Troubleshooting
+
+### DevTools not appearing
+
+Check that:
+
+1. You're in development mode
+2. The component is inside `QueryClientProvider`
+3. The package is installed correctly
+
+```bash
+npm list @tanstack/svelte-query-devtools
+```
+
+### DevTools in production
+
+The DevTools should be automatically removed. If they appear in production:
+
+1. Check your build configuration
+2. Ensure you're using a production build:
+
+```bash
+npm run build
+```
+
+### Styling conflicts
+
+If DevTools styles conflict with your app:
+
+1. Use `shadowDOMTarget` to isolate styles
+2. Adjust `position` and `buttonPosition`
+3. Apply custom CSS overrides
+
+## Implementation Details
+
+The DevTools component is implemented in `/packages/svelte-query-devtools/src/Devtools.svelte` and uses:
+
+- **Svelte 5 runes** - `$state`, `$effect`, `$derived`
+- **Dynamic import** - Lazy loads `@tanstack/query-devtools`
+- **Environment detection** - `DEV` and `BROWSER` from `esm-env`
+- **QueryClient integration** - Uses `useQueryClient` and `onlineManager`
+
+```typescript
+// Internal implementation
+if (DEV && BROWSER) {
+  import('@tanstack/query-devtools').then((m) => {
+    const QueryDevtools = m.TanstackQueryDevtools
+    devtools = new QueryDevtools({
+      client,
+      queryFlavor: 'Svelte Query',
+      version: '5',
+      onlineManager,
+      // ... options
+    })
+    devtools.mount(ref)
+  })
+}
+```
+
+## Next Steps
+
+<Steps>
+  <Step title="Explore Advanced Features">
+    Learn about SSR, persistence, and more advanced patterns.
+    
+    [Advanced Guides →](/guides/important-defaults)
+  </Step>
+  
+  <Step title="Production Deployment">
+    Learn best practices for deploying Svelte Query apps.
+    
+    [Best Practices →](/guides/important-defaults)
+  </Step>
+</Steps>
+
+## Resources
+
+- [DevTools Source Code](https://github.com/TanStack/query/tree/main/packages/svelte-query-devtools)
+- [TanStack Query DevTools](https://github.com/TanStack/query/tree/main/packages/query-devtools)
+- [Report Issues](https://github.com/TanStack/query/issues)
+
+<Tip>
+  The Svelte Query DevTools are maintained as part of the TanStack Query project and follow the same versioning and release cycle.
+</Tip>

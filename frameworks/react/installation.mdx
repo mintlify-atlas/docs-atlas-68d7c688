@@ -1,0 +1,357 @@
+---
+title: Installation
+description: Install and configure TanStack Query for React
+---
+
+# Installation
+
+Learn how to install and set up TanStack Query in your React application.
+
+## Requirements
+
+TanStack Query is compatible with React v18 and v19.
+
+- React 18.0.0 or later
+- React 19.0.0 or later
+
+<Note>
+  React Query version 5.90.21 and above supports both React 18 and React 19. Make sure you're using a compatible version.
+</Note>
+
+## Package Installation
+
+<Steps>
+  <Step title="Install the package">
+    Install TanStack Query using your preferred package manager:
+
+    <CodeGroup>
+      ```bash npm
+      npm install @tanstack/react-query
+      ```
+
+      ```bash pnpm
+      pnpm add @tanstack/react-query
+      ```
+
+      ```bash yarn
+      yarn add @tanstack/react-query
+      ```
+
+      ```bash bun
+      bun add @tanstack/react-query
+      ```
+    </CodeGroup>
+  </Step>
+
+  <Step title="Install DevTools (Optional)">
+    For development, install the DevTools package:
+
+    <CodeGroup>
+      ```bash npm
+      npm install @tanstack/react-query-devtools
+      ```
+
+      ```bash pnpm
+      pnpm add @tanstack/react-query-devtools
+      ```
+
+      ```bash yarn
+      yarn add @tanstack/react-query-devtools
+      ```
+
+      ```bash bun
+      bun add @tanstack/react-query-devtools
+      ```
+    </CodeGroup>
+
+    <Tip>
+      The DevTools package is tree-shakeable and only includes development code when `NODE_ENV !== 'production'`, so it's safe to include in production builds.
+    </Tip>
+  </Step>
+</Steps>
+
+## Setup
+
+<Steps>
+  <Step title="Create a QueryClient">
+    Create a `QueryClient` instance to manage queries and mutations:
+
+    ```tsx
+    import { QueryClient } from '@tanstack/react-query'
+
+    const queryClient = new QueryClient()
+    ```
+
+    You can configure default options for all queries and mutations:
+
+    ```tsx
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: {
+          staleTime: 60 * 1000, // 1 minute
+          gcTime: 10 * 60 * 1000, // 10 minutes
+          retry: 1,
+          refetchOnWindowFocus: false,
+        },
+        mutations: {
+          retry: 0,
+        },
+      },
+    })
+    ```
+  </Step>
+
+  <Step title="Wrap your app with QueryClientProvider">
+    Provide the `QueryClient` to your React app using the `QueryClientProvider`:
+
+    ```tsx
+    import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+
+    const queryClient = new QueryClient()
+
+    function App() {
+      return (
+        <QueryClientProvider client={queryClient}>
+          {/* Your app components */}
+        </QueryClientProvider>
+      )
+    }
+
+    export default App
+    ```
+  </Step>
+
+  <Step title="Add DevTools (Development)">
+    Import and add the DevTools component for development:
+
+    ```tsx
+    import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+    import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
+
+    const queryClient = new QueryClient()
+
+    function App() {
+      return (
+        <QueryClientProvider client={queryClient}>
+          {/* Your app components */}
+          <ReactQueryDevtools initialIsOpen={false} />
+        </QueryClientProvider>
+      )
+    }
+
+    export default App
+    ```
+
+    <Note>
+      The DevTools component only renders in development mode (`NODE_ENV === 'development'`), so you don't need to conditionally import it.
+    </Note>
+  </Step>
+</Steps>
+
+## Complete Example
+
+Here's a complete setup example:
+
+```tsx src/main.tsx
+import React from 'react'
+import ReactDOM from 'react-dom/client'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
+import App from './App'
+
+// Create a client
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 60 * 1000,
+      retry: 1,
+    },
+  },
+})
+
+ReactDOM.createRoot(document.getElementById('root')!).render(
+  <React.StrictMode>
+    <QueryClientProvider client={queryClient}>
+      <App />
+      <ReactQueryDevtools initialIsOpen={false} />
+    </QueryClientProvider>
+  </React.StrictMode>,
+)
+```
+
+## Configuration Options
+
+Customize the `QueryClient` with these common options:
+
+### Query Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `staleTime` | `number \| Infinity` | `0` | Time in ms until data becomes stale |
+| `gcTime` | `number \| Infinity` | `5 * 60 * 1000` | Time in ms unused data stays in cache |
+| `retry` | `boolean \| number \| function` | `3` | Number of retry attempts for failed queries |
+| `retryDelay` | `number \| function` | exponential backoff | Delay between retries |
+| `refetchOnWindowFocus` | `boolean \| "always"` | `true` | Refetch on window focus |
+| `refetchOnMount` | `boolean \| "always"` | `true` | Refetch on component mount |
+| `refetchOnReconnect` | `boolean \| "always"` | `true` | Refetch when reconnecting |
+| `refetchInterval` | `number \| false` | `false` | Interval for automatic refetching |
+
+### Mutation Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `retry` | `boolean \| number \| function` | `0` | Number of retry attempts for failed mutations |
+| `retryDelay` | `number \| function` | exponential backoff | Delay between retries |
+
+<Warning>
+  Be careful with aggressive retry settings in production, as they can impact server load and user experience.
+</Warning>
+
+## Environment-Specific Configuration
+
+Configure different settings for development and production:
+
+```tsx
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: process.env.NODE_ENV === 'production' ? 60 * 1000 : 0,
+      gcTime: process.env.NODE_ENV === 'production' ? 10 * 60 * 1000 : 5 * 60 * 1000,
+      retry: process.env.NODE_ENV === 'production' ? 3 : 1,
+      refetchOnWindowFocus: process.env.NODE_ENV === 'production',
+    },
+  },
+})
+```
+
+## Next.js Setup
+
+For Next.js applications, create a separate client component:
+
+```tsx app/providers.tsx
+'use client'
+
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
+import { useState } from 'react'
+
+export function Providers({ children }: { children: React.ReactNode }) {
+  const [queryClient] = useState(
+    () =>
+      new QueryClient({
+        defaultOptions: {
+          queries: {
+            staleTime: 60 * 1000,
+          },
+        },
+      }),
+  )
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      {children}
+      <ReactQueryDevtools initialIsOpen={false} />
+    </QueryClientProvider>
+  )
+}
+```
+
+Then use it in your root layout:
+
+```tsx app/layout.tsx
+import { Providers } from './providers'
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode
+}) {
+  return (
+    <html lang="en">
+      <body>
+        <Providers>{children}</Providers>
+      </body>
+    </html>
+  )
+}
+```
+
+<Tip>
+  Always create the `QueryClient` inside a component using `useState` to ensure each request gets a new client instance in Server Components.
+</Tip>
+
+## Persister Setup (Optional)
+
+To persist query cache across sessions:
+
+```bash
+npm install @tanstack/react-query-persist-client
+```
+
+```tsx
+import { QueryClient } from '@tanstack/react-query'
+import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client'
+import { createSyncStoragePersister } from '@tanstack/query-sync-storage-persister'
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      gcTime: 1000 * 60 * 60 * 24, // 24 hours
+    },
+  },
+})
+
+const persister = createSyncStoragePersister({
+  storage: window.localStorage,
+})
+
+function App() {
+  return (
+    <PersistQueryClientProvider
+      client={queryClient}
+      persistOptions={{ persister }}
+    >
+      {/* Your app */}
+    </PersistQueryClientProvider>
+  )
+}
+```
+
+## Verification
+
+Verify your installation by creating a simple query:
+
+```tsx src/App.tsx
+import { useQuery } from '@tanstack/react-query'
+
+function App() {
+  const { data, isLoading } = useQuery({
+    queryKey: ['hello'],
+    queryFn: async () => {
+      const response = await fetch('https://api.example.com/hello')
+      return response.json()
+    },
+  })
+
+  if (isLoading) return <div>Loading...</div>
+
+  return <div>Data: {JSON.stringify(data)}</div>
+}
+
+export default App
+```
+
+<Note>
+  If you see the DevTools floating button in the bottom-right corner of your app, React Query is successfully installed!
+</Note>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="rocket" href="/frameworks/react/quick-start">
+    Build your first React Query application
+  </Card>
+  <Card title="TypeScript" icon="code" href="/frameworks/react/typescript">
+    Configure TypeScript for type-safe queries
+  </Card>
+</CardGroup>

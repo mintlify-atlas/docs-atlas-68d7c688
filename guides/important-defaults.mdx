@@ -1,0 +1,302 @@
+---
+title: Important Defaults
+description: Understanding TanStack Query's default configurations and when to override them
+---
+
+TanStack Query is configured with aggressive but sensible defaults. Understanding these defaults will help you build better applications and avoid common pitfalls.
+
+## Default Query Behavior
+
+By default, TanStack Query assumes you want fresh data and will aggressively refetch to keep your UI synchronized with the server.
+
+### Stale Time: 0ms
+
+Queries are immediately considered stale after fetching completes.
+
+```tsx
+// Default behavior - data is immediately stale
+const { data } = useQuery({
+  queryKey: ['posts'],
+  queryFn: fetchPosts,
+  // staleTime: 0 (implicit default)
+})
+```
+
+<Note>
+Stale queries are refetched automatically in the background when:
+- New instances of the query mount
+- The window is refocused
+- The network is reconnected
+- Configured refetch intervals trigger
+</Note>
+
+### Garbage Collection Time: 5 Minutes
+
+Inactive queries are garbage collected after 5 minutes (300,000ms).
+
+```tsx
+// Default gcTime is 5 minutes
+const { data } = useQuery({
+  queryKey: ['posts'],
+  queryFn: fetchPosts,
+  // gcTime: 300000 (implicit default)
+})
+```
+
+<Warning>
+If users navigate back to a page before `gcTime` expires, they'll see cached data instantly. After `gcTime` expires, there will be a loading state.
+</Warning>
+
+## Automatic Refetching Defaults
+
+### Refetch on Window Focus: true
+
+Queries automatically refetch when the window regains focus if the data is stale.
+
+```tsx
+// This is the default behavior
+const { data } = useQuery({
+  queryKey: ['posts'],
+  queryFn: fetchPosts,
+  refetchOnWindowFocus: true, // default
+})
+
+// Disable for specific queries
+const { data } = useQuery({
+  queryKey: ['static-config'],
+  queryFn: fetchConfig,
+  refetchOnWindowFocus: false,
+})
+
+// Always refetch, even if data is fresh
+const { data } = useQuery({
+  queryKey: ['real-time-data'],
+  queryFn: fetchRealtimeData,
+  refetchOnWindowFocus: 'always',
+})
+```
+
+### Refetch on Mount: true
+
+Queries refetch on mount if the data is stale.
+
+```tsx
+// Default behavior
+const { data } = useQuery({
+  queryKey: ['posts'],
+  queryFn: fetchPosts,
+  refetchOnMount: true, // default
+})
+
+// Never refetch on mount
+const { data } = useQuery({
+  queryKey: ['posts'],
+  queryFn: fetchPosts,
+  refetchOnMount: false,
+})
+```
+
+### Refetch on Reconnect: true
+
+Queries refetch when the network reconnects if the data is stale.
+
+```tsx
+// Default behavior
+const { data } = useQuery({
+  queryKey: ['posts'],
+  queryFn: fetchPosts,
+  refetchOnReconnect: true, // default
+})
+```
+
+## Retry Defaults
+
+### Retry: 3 Attempts
+
+Failed queries retry 3 times with exponential backoff before showing an error.
+
+```tsx
+// Default retry behavior
+const { data } = useQuery({
+  queryKey: ['posts'],
+  queryFn: fetchPosts,
+  retry: 3, // default
+})
+
+// Custom retry logic
+const { data } = useQuery({
+  queryKey: ['posts'],
+  queryFn: fetchPosts,
+  retry: (failureCount, error) => {
+    // Don't retry on 404
+    if (error.status === 404) return false
+    // Retry up to 5 times for other errors
+    return failureCount < 5
+  },
+})
+```
+
+### Retry Delay: Exponential Backoff
+
+Retries use exponential backoff by default:
+
+```tsx
+// Default retry delay: min(1000 * 2 ** attemptIndex, 30000)
+// Attempt 1: ~1 second
+// Attempt 2: ~2 seconds  
+// Attempt 3: ~4 seconds
+
+// Custom retry delay
+const { data } = useQuery({
+  queryKey: ['posts'],
+  queryFn: fetchPosts,
+  retryDelay: (attemptIndex) => Math.min(1000 * attemptIndex, 5000),
+})
+```
+
+## Setting Global Defaults
+
+Override defaults globally for all queries:
+
+```tsx
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 60 * 1000, // 1 minute
+      gcTime: 5 * 60 * 1000, // 5 minutes (default)
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: false,
+      retry: 1,
+    },
+    mutations: {
+      retry: 1,
+    },
+  },
+})
+
+function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <YourApp />
+    </QueryClientProvider>
+  )
+}
+```
+
+<Tip>
+Set sensible defaults globally, then override them for specific queries that need different behavior.
+</Tip>
+
+## Network Mode Defaults
+
+### Network Mode: online
+
+Queries and mutations only run when there's an active network connection.
+
+```tsx
+// Default - only run when online
+const { data } = useQuery({
+  queryKey: ['posts'],
+  queryFn: fetchPosts,
+  networkMode: 'online', // default
+})
+
+// Always run, even offline
+const { data } = useQuery({
+  queryKey: ['offline-data'],
+  queryFn: fetchOfflineData,
+  networkMode: 'always',
+})
+
+// Run when online, but show cached data when offline
+const { data } = useQuery({
+  queryKey: ['posts'],
+  queryFn: fetchPosts,
+  networkMode: 'offlineFirst',
+})
+```
+
+## Query Enabled Default
+
+Queries are enabled by default and run automatically.
+
+```tsx
+// Default - query runs immediately
+const { data } = useQuery({
+  queryKey: ['user', userId],
+  queryFn: () => fetchUser(userId),
+  // enabled: true (implicit default)
+})
+
+// Conditional execution
+const { data } = useQuery({
+  queryKey: ['user', userId],
+  queryFn: () => fetchUser(userId),
+  enabled: !!userId, // Only run if userId exists
+})
+```
+
+## Recommended Configurations
+
+### For Static/Slow-Changing Data
+
+```tsx
+const { data } = useQuery({
+  queryKey: ['config'],
+  queryFn: fetchConfig,
+  staleTime: Infinity,
+  gcTime: Infinity,
+  refetchOnWindowFocus: false,
+  refetchOnMount: false,
+  refetchOnReconnect: false,
+})
+```
+
+### For Real-Time Data
+
+```tsx
+const { data } = useQuery({
+  queryKey: ['live-data'],
+  queryFn: fetchLiveData,
+  staleTime: 0,
+  refetchInterval: 1000,
+  refetchIntervalInBackground: true,
+  refetchOnWindowFocus: 'always',
+})
+```
+
+### For User-Specific Data
+
+```tsx
+const { data } = useQuery({
+  queryKey: ['user', userId],
+  queryFn: () => fetchUser(userId),
+  staleTime: 5 * 60 * 1000, // 5 minutes
+  gcTime: 10 * 60 * 1000, // 10 minutes
+})
+```
+
+### For List/Detail Pattern
+
+```tsx
+// List view - shorter stale time
+const { data: posts } = useQuery({
+  queryKey: ['posts'],
+  queryFn: fetchPosts,
+  staleTime: 30 * 1000, // 30 seconds
+})
+
+// Detail view - longer stale time, seeded from list
+const { data: post } = useQuery({
+  queryKey: ['post', postId],
+  queryFn: () => fetchPost(postId),
+  staleTime: 5 * 60 * 1000, // 5 minutes
+  initialData: () => posts?.find(p => p.id === postId),
+})
+```
+
+<Warning>
+Changing defaults can significantly impact your app's behavior. Always test thoroughly when adjusting these settings.
+</Warning>

@@ -1,0 +1,380 @@
+---
+title: Default Query Function
+description: Configure a default query function to eliminate repetitive queryFn declarations
+---
+
+Default query functions allow you to define a global query function that's used when no `queryFn` is specified. This is useful for standardizing data fetching across your application.
+
+## Setting a Default Query Function
+
+Configure a default query function when creating the `QueryClient`:
+
+```tsx
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      queryFn: async ({ queryKey }) => {
+        const response = await fetch(`https://api.example.com/${queryKey.join('/')}`)
+        if (!response.ok) {
+          throw new Error('Network response was not ok')
+        }
+        return response.json()
+      },
+    },
+  },
+})
+
+function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <YourApp />
+    </QueryClientProvider>
+  )
+}
+```
+
+<Note>
+With a default query function, you can omit the `queryFn` option in individual queries.
+</Note>
+
+## Using Queries Without queryFn
+
+Once configured, use queries without specifying `queryFn`:
+
+```tsx
+import { useQuery } from '@tanstack/react-query'
+
+function Users() {
+  // Uses default queryFn - fetches from: /api/users
+  const { data } = useQuery({
+    queryKey: ['api', 'users']
+  })
+
+  return (
+    <ul>
+      {data?.map(user => (
+        <li key={user.id}>{user.name}</li>
+      ))}
+    </ul>
+  )
+}
+
+function User({ id }: { id: number }) {
+  // Uses default queryFn - fetches from: /api/users/123
+  const { data } = useQuery({
+    queryKey: ['api', 'users', id]
+  })
+
+  return <div>{data?.name}</div>
+}
+```
+
+<Tip>
+Structure your query keys to match your API endpoints when using a default query function.
+</Tip>
+
+## Overriding the Default
+
+You can still provide a custom `queryFn` for specific queries:
+
+```tsx
+import { useQuery } from '@tanstack/react-query'
+
+function SpecialData() {
+  const { data } = useQuery({
+    queryKey: ['special'],
+    // Override the default queryFn for this query
+    queryFn: async () => {
+      const response = await fetch('https://different-api.com/data')
+      return response.json()
+    }
+  })
+
+  return <div>{data?.value}</div>
+}
+```
+
+## Advanced Default Function
+
+Create a more sophisticated default function with error handling and authentication:
+
+```tsx
+import { QueryClient } from '@tanstack/react-query'
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      queryFn: async ({ queryKey, signal, meta }) => {
+        const [baseUrl, ...pathParts] = queryKey as string[]
+        const path = pathParts.join('/')
+        
+        const headers: HeadersInit = {
+          'Content-Type': 'application/json',
+        }
+        
+        // Add auth token if available
+        const token = localStorage.getItem('authToken')
+        if (token) {
+          headers['Authorization'] = `Bearer ${token}`
+        }
+        
+        // Support custom headers from meta
+        if (meta?.headers) {
+          Object.assign(headers, meta.headers)
+        }
+        
+        const response = await fetch(`https://api.example.com/${path}`, {
+          headers,
+          signal, // Support query cancellation
+        })
+        
+        if (!response.ok) {
+          const error = await response.json()
+          throw new Error(error.message || 'An error occurred')
+        }
+        
+        return response.json()
+      },
+      staleTime: 5 * 60 * 1000, // 5 minutes
+      retry: 3,
+    },
+  },
+})
+```
+
+## Using with TypeScript
+
+Type your default query function for better type safety:
+
+```tsx
+import { QueryClient, QueryKey } from '@tanstack/react-query'
+
+interface ApiQueryKey extends Array<string | number> {
+  0: 'api'
+}
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      queryFn: async ({ queryKey }: { queryKey: QueryKey }) => {
+        const [_, ...pathParts] = queryKey as ApiQueryKey
+        const path = pathParts.join('/')
+        
+        const response = await fetch(`https://api.example.com/${path}`)
+        
+        if (!response.ok) {
+          throw new Error('Network error')
+        }
+        
+        return response.json()
+      },
+    },
+  },
+})
+```
+
+## Query-Specific Defaults
+
+Set defaults for specific query keys using `setQueryDefaults`:
+
+```tsx
+import { useQueryClient } from '@tanstack/react-query'
+
+function App() {
+  const queryClient = useQueryClient()
+
+  // Set defaults for all 'users' queries
+  queryClient.setQueryDefaults(['users'], {
+    queryFn: async () => {
+      const res = await fetch('/api/users')
+      return res.json()
+    },
+    staleTime: 10 * 1000,
+  })
+
+  // Set defaults for all 'posts' queries
+  queryClient.setQueryDefaults(['posts'], {
+    queryFn: async () => {
+      const res = await fetch('/api/posts')
+      return res.json()
+    },
+    staleTime: 5 * 1000,
+  })
+
+  return <YourApp />
+}
+```
+
+Source: packages/query-core/src/queryClient.ts:473
+
+<Steps>
+  <Step title="Define query defaults">
+    Use `setQueryDefaults` with a query key prefix
+  </Step>
+  <Step title="Defaults apply to matching keys">
+    Any query with a matching key prefix inherits these defaults
+  </Step>
+  <Step title="Use queries without options">
+    Queries automatically use the configured defaults
+  </Step>
+</Steps>
+
+## Partial Matching
+
+Query defaults use partial key matching:
+
+```tsx
+queryClient.setQueryDefaults(['users'], {
+  queryFn: fetchUsers,
+  staleTime: 10000,
+})
+
+// ✅ Matches - inherits defaults
+useQuery({ queryKey: ['users'] })
+
+// ✅ Matches - inherits defaults (partial match)
+useQuery({ queryKey: ['users', 'active'] })
+
+// ✅ Matches - inherits defaults (partial match)
+useQuery({ queryKey: ['users', { status: 'active' }] })
+
+// ❌ Does not match - 'users' is not the prefix
+useQuery({ queryKey: ['admin', 'users'] })
+```
+
+<Warning>
+Query defaults match by prefix. The defaults key must be a prefix of the query key, not vice versa.
+</Warning>
+
+Source: packages/query-core/src/queryClient.ts:493
+
+## Getting Query Defaults
+
+Retrieve defaults for a specific query key:
+
+```tsx
+import { useQueryClient } from '@tanstack/react-query'
+
+function Component() {
+  const queryClient = useQueryClient()
+  
+  const defaults = queryClient.getQueryDefaults(['users'])
+  
+  console.log(defaults)
+  // { queryFn: [Function], staleTime: 10000, ... }
+}
+```
+
+## Merging with Other Defaults
+
+Query defaults merge with global defaults and query-specific options:
+
+```tsx
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 0,
+      retry: 3,
+    },
+  },
+})
+
+queryClient.setQueryDefaults(['users'], {
+  staleTime: 10000,
+  refetchOnWindowFocus: false,
+})
+
+// Final options for this query:
+useQuery({
+  queryKey: ['users'],
+  gcTime: 60000,
+})
+
+// Results in:
+// {
+//   staleTime: 10000,          // from setQueryDefaults
+//   retry: 3,                  // from global defaults
+//   refetchOnWindowFocus: false, // from setQueryDefaults
+//   gcTime: 60000,             // from query options
+// }
+```
+
+## Real-World Example
+
+A complete setup for a REST API:
+
+```tsx
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+
+class ApiError extends Error {
+  constructor(public status: number, message: string) {
+    super(message)
+  }
+}
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      queryFn: async ({ queryKey, signal }) => {
+        const [_api, ...pathParts] = queryKey as [string, ...(string | number)[]]
+        const url = `${import.meta.env.VITE_API_URL}/${pathParts.join('/')}`
+        
+        const response = await fetch(url, {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${getAuthToken()}`,
+          },
+          signal,
+        })
+        
+        if (!response.ok) {
+          throw new ApiError(response.status, await response.text())
+        }
+        
+        return response.json()
+      },
+      staleTime: 30 * 1000,
+      retry: (failureCount, error) => {
+        if (error instanceof ApiError && error.status === 404) {
+          return false // Don't retry 404s
+        }
+        return failureCount < 3
+      },
+    },
+  },
+})
+
+// Now use queries without queryFn:
+function Users() {
+  const { data } = useQuery({ queryKey: ['api', 'users'] })
+  return <div>{data?.length} users</div>
+}
+
+function User({ id }: { id: number }) {
+  const { data } = useQuery({ queryKey: ['api', 'users', id] })
+  return <div>{data?.name}</div>
+}
+```
+
+## When to Use Default Query Functions
+
+<Tip>
+Use default query functions when:
+- Your API follows consistent patterns
+- You want to centralize auth, error handling, or logging
+- You have many similar queries
+- You want to reduce boilerplate
+
+Avoid when:
+- Your queries fetch from different sources
+- Each query needs unique logic
+- You prefer explicit queryFn declarations
+</Tip>
+
+## See Also
+
+- [Query Functions](/guides/query-functions) - Detailed query function guide
+- [Query Keys](/guides/query-keys) - Structuring effective query keys
+- [TypeScript](/guides/typescript) - Type-safe query configuration

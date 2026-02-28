@@ -1,0 +1,335 @@
+---
+title: Parallel Queries
+description: Execute multiple queries simultaneously for better performance
+---
+
+Parallel queries allow you to fetch multiple pieces of data simultaneously, improving application performance by running requests concurrently rather than sequentially.
+
+## Multiple useQuery Hooks
+
+The simplest way to run queries in parallel is to call `useQuery` multiple times:
+
+```tsx
+import { useQuery } from '@tanstack/react-query'
+
+function Dashboard() {
+  const users = useQuery({
+    queryKey: ['users'],
+    queryFn: fetchUsers,
+  })
+
+  const projects = useQuery({
+    queryKey: ['projects'],
+    queryFn: fetchProjects,
+  })
+
+  const tasks = useQuery({
+    queryKey: ['tasks'],
+    queryFn: fetchTasks,
+  })
+
+  if (users.isPending || projects.isPending || tasks.isPending) {
+    return <div>Loading...</div>
+  }
+
+  return (
+    <div>
+      <UserList data={users.data} />
+      <ProjectList data={projects.data} />
+      <TaskList data={tasks.data} />
+    </div>
+  )
+}
+```
+
+<Note>
+  When using multiple `useQuery` hooks, TanStack Query automatically runs them in parallel. The browser's connection limits determine how many can run simultaneously.
+</Note>
+
+## useQueries Hook
+
+For dynamic numbers of queries or better control, use `useQueries`:
+
+```tsx
+import { useQueries } from '@tanstack/react-query'
+
+function UserProjects({ userIds }) {
+  const results = useQueries({
+    queries: userIds.map((id) => ({
+      queryKey: ['user', id],
+      queryFn: () => fetchUser(id),
+      staleTime: 5000,
+    })),
+  })
+
+  const isLoading = results.some((result) => result.isPending)
+  const hasError = results.some((result) => result.isError)
+
+  if (isLoading) return <div>Loading users...</div>
+  if (hasError) return <div>Error loading some users</div>
+
+  return (
+    <div>
+      {results.map((result, i) => (
+        <div key={userIds[i]}>
+          {result.data?.name}
+        </div>
+      ))}
+    </div>
+  )
+}
+```
+
+<Tip>
+  `useQueries` is perfect for fetching data for a dynamic list of items, such as loading details for multiple user IDs, product SKUs, or other entities.
+</Tip>
+
+## Combining Results
+
+Use the `combine` option to transform multiple query results into a single value:
+
+```tsx
+const { data, isPending } = useQueries({
+  queries: [
+    { queryKey: ['users'], queryFn: fetchUsers },
+    { queryKey: ['projects'], queryFn: fetchProjects },
+    { queryKey: ['tasks'], queryFn: fetchTasks },
+  ],
+  combine: (results) => {
+    return {
+      data: {
+        users: results[0]?.data,
+        projects: results[1]?.data,
+        tasks: results[2]?.data,
+      },
+      isPending: results.some((result) => result.isPending),
+    }
+  },
+})
+
+if (isPending) return <div>Loading...</div>
+
+return (
+  <div>
+    <UserList users={data.users} />
+    <ProjectList projects={data.projects} />
+    <TaskList tasks={data.tasks} />
+  </div>
+)
+```
+
+<Steps>
+  <Step title="Define queries array">
+    Create an array of query configurations with their keys and fetch functions.
+  </Step>
+
+  <Step title="Add combine function">
+    Transform the array of results into your desired data structure.
+  </Step>
+
+  <Step title="Use combined result">
+    Access the transformed data and derived state from the combined result.
+  </Step>
+</Steps>
+
+## Type-Safe Queries
+
+Define types for better TypeScript support with `useQueries`:
+
+```tsx
+interface User {
+  id: number
+  name: string
+}
+
+const userQueries = useQueries({
+  queries: userIds.map((id) => ({
+    queryKey: ['user', id],
+    queryFn: (): Promise<User> => fetchUser(id),
+  })),
+})
+
+// Each result is typed as UseQueryResult<User>
+const firstUserName = userQueries[0]?.data?.name
+```
+
+## Handling Individual Errors
+
+Process errors from parallel queries independently:
+
+```tsx
+const results = useQueries({
+  queries: [
+    { queryKey: ['users'], queryFn: fetchUsers },
+    { queryKey: ['projects'], queryFn: fetchProjects },
+  ],
+})
+
+return (
+  <div>
+    {results[0].isError && (
+      <div>Failed to load users: {results[0].error.message}</div>
+    )}
+    {results[0].data && <UserList data={results[0].data} />}
+
+    {results[1].isError && (
+      <div>Failed to load projects: {results[1].error.message}</div>
+    )}
+    {results[1].data && <ProjectList data={results[1].data} />}
+  </div>
+)
+```
+
+<Note>
+  Each query in `useQueries` maintains its own state, allowing you to handle loading, error, and success states independently.
+</Note>
+
+## Dynamic Parallel Queries
+
+Generate queries dynamically based on runtime data:
+
+```tsx
+function TeamDashboard({ team }) {
+  const memberQueries = useQueries({
+    queries: team.memberIds.map((memberId) => ({
+      queryKey: ['member', memberId],
+      queryFn: () => fetchMember(memberId),
+    })),
+  })
+
+  const taskQueries = useQueries({
+    queries: team.projectIds.map((projectId) => ({
+      queryKey: ['project-tasks', projectId],
+      queryFn: () => fetchProjectTasks(projectId),
+    })),
+  })
+
+  return (
+    <div>
+      <h2>Team Members</h2>
+      {memberQueries.map((query, i) => (
+        <div key={team.memberIds[i]}>
+          {query.isPending ? 'Loading...' : query.data?.name}
+        </div>
+      ))}
+
+      <h2>Project Tasks</h2>
+      {taskQueries.map((query, i) => (
+        <div key={team.projectIds[i]}>
+          {query.isPending ? 'Loading...' : `${query.data?.length} tasks`}
+        </div>
+      ))}
+    </div>
+  )
+}
+```
+
+## Optimizing Parallel Queries
+
+### Shared Configuration
+
+Apply common options to all queries:
+
+```tsx
+const commonOptions = {
+  staleTime: 5000,
+  retry: 3,
+  refetchOnWindowFocus: false,
+}
+
+const results = useQueries({
+  queries: userIds.map((id) => ({
+    ...commonOptions,
+    queryKey: ['user', id],
+    queryFn: () => fetchUser(id),
+  })),
+})
+```
+
+### Selective Refetching
+
+Refetch specific queries based on conditions:
+
+```tsx
+const results = useQueries({
+  queries: [
+    {
+      queryKey: ['static-data'],
+      queryFn: fetchStaticData,
+      staleTime: Infinity, // Never refetch
+    },
+    {
+      queryKey: ['dynamic-data'],
+      queryFn: fetchDynamicData,
+      staleTime: 0, // Always refetch
+    },
+  ],
+})
+```
+
+<Tip>
+  Use different `staleTime` values for queries with different freshness requirements. Static reference data can have a longer `staleTime` than frequently changing data.
+</Tip>
+
+## Waiting for All Queries
+
+Wait for all queries to complete before showing content:
+
+```tsx
+const results = useQueries({
+  queries: [
+    { queryKey: ['users'], queryFn: fetchUsers },
+    { queryKey: ['projects'], queryFn: fetchProjects },
+    { queryKey: ['settings'], queryFn: fetchSettings },
+  ],
+  combine: (results) => ({
+    data: results.map((r) => r.data),
+    isPending: results.some((r) => r.isPending),
+    isError: results.some((r) => r.isError),
+  }),
+})
+
+if (results.isPending) {
+  return <LoadingSpinner />
+}
+
+if (results.isError) {
+  return <ErrorMessage />
+}
+
+const [users, projects, settings] = results.data
+
+return <Dashboard users={users} projects={projects} settings={settings} />
+```
+
+## Parallel Queries with Dependencies
+
+Some queries may depend on others. See the [Dependent Queries](/guides/dependent-queries) guide for handling sequential dependencies.
+
+<Warning>
+  Avoid making queries dependent on each other when they could run in parallel. This reduces performance and increases total loading time.
+</Warning>
+
+## QueriesObserver API
+
+For advanced use cases outside of React, use `QueriesObserver` directly:
+
+```tsx
+import { QueriesObserver } from '@tanstack/query-core'
+
+const observer = new QueriesObserver(queryClient, [
+  { queryKey: ['users'], queryFn: fetchUsers },
+  { queryKey: ['projects'], queryFn: fetchProjects },
+])
+
+const unsubscribe = observer.subscribe((result) => {
+  console.log('Queries updated:', result)
+})
+
+// Later
+unsubscribe()
+```
+
+<Note>
+  The `QueriesObserver` class is the underlying implementation that powers `useQueries`. It's useful for non-React environments or advanced custom hooks.
+</Note>

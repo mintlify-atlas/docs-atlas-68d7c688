@@ -1,0 +1,536 @@
+---
+title: persistQueryClient
+description: Persist and restore your QueryClient to/from storage with built-in or custom persisters
+---
+
+The `persistQueryClient` utility provides a way to save your query cache to persistent storage (like localStorage, IndexedDB, or AsyncStorage) and restore it later. This is useful for:
+
+- Persisting data across page reloads
+- Offline-first applications
+- Reducing initial load times
+- Improving user experience with instant data
+
+## Installation
+
+The persist client utilities are in separate packages:
+
+<CodeGroup>
+```bash npm
+npm i @tanstack/react-query-persist-client
+npm i @tanstack/query-sync-storage-persister
+npm i @tanstack/query-async-storage-persister
+```
+
+```bash pnpm
+pnpm add @tanstack/react-query-persist-client
+pnpm add @tanstack/query-sync-storage-persister
+pnpm add @tanstack/query-async-storage-persister
+```
+
+```bash yarn
+yarn add @tanstack/react-query-persist-client
+yarn add @tanstack/query-sync-storage-persister
+yarn add @tanstack/query-async-storage-persister
+```
+</CodeGroup>
+
+## Quick Start
+
+### With localStorage (Web)
+
+```typescript
+import { QueryClient } from '@tanstack/react-query'
+import { persistQueryClient } from '@tanstack/react-query-persist-client'
+import { createSyncStoragePersister } from '@tanstack/query-sync-storage-persister'
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      gcTime: 1000 * 60 * 60 * 24, // 24 hours
+    },
+  },
+})
+
+const persister = createSyncStoragePersister({
+  storage: window.localStorage,
+})
+
+persistQueryClient({
+  queryClient,
+  persister,
+})
+```
+
+### With React Native AsyncStorage
+
+```typescript
+import AsyncStorage from '@react-native-async-storage/async-storage'
+import { QueryClient } from '@tanstack/react-query'
+import { persistQueryClient } from '@tanstack/react-query-persist-client'
+import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister'
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      gcTime: 1000 * 60 * 60 * 24, // 24 hours
+    },
+  },
+})
+
+const asyncStoragePersister = createAsyncStoragePersister({
+  storage: AsyncStorage,
+})
+
+persistQueryClient({
+  queryClient,
+  persister: asyncStoragePersister,
+})
+```
+
+<Warning>
+  **Important**: Set `gcTime` to at least the same value as `maxAge` (default 24 hours), or set it to `Infinity` to disable garbage collection.
+</Warning>
+
+## How It Works
+
+### Garbage Collection Time (`gcTime`)
+
+The `gcTime` option determines how long inactive query data stays in memory. It's critical for persistence:
+
+```typescript
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      gcTime: 1000 * 60 * 60 * 24, // 24 hours (matches default maxAge)
+      // or
+      gcTime: Infinity, // Never garbage collect
+    },
+  },
+})
+```
+
+<Accordion title="Why does gcTime matter?">
+  If `gcTime` is shorter than the persist `maxAge`, your cached data will be garbage collected before it's supposed to expire. For example:
+
+  - `maxAge: 24 hours` (persist keeps data for 24 hours)
+  - `gcTime: 5 minutes` (default)
+  - Result: Data is removed from memory after 5 minutes, even though persist expects it to last 24 hours
+
+  Set `gcTime` to match or exceed `maxAge`.
+</Accordion>
+
+### Cache Busting
+
+Force cache invalidation when your app changes:
+
+```typescript
+import { version } from './package.json'
+
+persistQueryClient({
+  queryClient,
+  persister,
+  buster: version, // Invalidate on version change
+})
+```
+
+When the cache is restored, if the `buster` string doesn't match, the persisted data is discarded.
+
+### Automatic Removal
+
+The persister automatically removes data that is:
+
+1. **Expired**: Older than `maxAge`
+2. **Busted**: `buster` string doesn't match
+3. **Error**: Restoration threw an error
+4. **Empty**: No data found (`undefined`)
+
+## API Reference
+
+### `persistQueryClient`
+
+Restores cache immediately and subscribes to changes:
+
+```typescript
+const unsubscribe = persistQueryClient({
+  queryClient,
+  persister,
+  maxAge: 1000 * 60 * 60 * 24, // 24 hours (default)
+  buster: '',
+  hydrateOptions: undefined,
+  dehydrateOptions: undefined,
+})
+
+// Later: stop persisting
+unsubscribe()
+```
+
+**Options:**
+
+- `queryClient`: The QueryClient to persist
+- `persister`: Persister implementation
+- `maxAge`: Maximum age in milliseconds (default: 24 hours)
+- `buster`: String to force cache invalidation
+- `hydrateOptions`: Options passed to `hydrate()`
+- `dehydrateOptions`: Options passed to `dehydrate()`
+
+### `persistQueryClientSave`
+
+Manually save the cache:
+
+```typescript
+await persistQueryClientSave({
+  queryClient,
+  persister,
+  buster: '',
+  dehydrateOptions: undefined,
+})
+```
+
+Throttled to once per second by default.
+
+### `persistQueryClientRestore`
+
+Manually restore the cache:
+
+```typescript
+await persistQueryClientRestore({
+  queryClient,
+  persister,
+  maxAge: 1000 * 60 * 60 * 24,
+  buster: '',
+  hydrateOptions: undefined,
+})
+```
+
+### `persistQueryClientSubscribe`
+
+Subscribe to cache changes without initial restore:
+
+```typescript
+const unsubscribe = persistQueryClientSubscribe({
+  queryClient,
+  persister,
+  buster: '',
+  dehydrateOptions: undefined,
+})
+
+// Later: unsubscribe
+unsubscribe()
+```
+
+## React Integration
+
+### PersistQueryClientProvider
+
+For proper React integration, use `PersistQueryClientProvider`:
+
+```typescript
+import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client'
+import { createSyncStoragePersister } from '@tanstack/query-sync-storage-persister'
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      gcTime: 1000 * 60 * 60 * 24, // 24 hours
+    },
+  },
+})
+
+const persister = createSyncStoragePersister({
+  storage: window.localStorage,
+})
+
+function App() {
+  return (
+    <PersistQueryClientProvider
+      client={queryClient}
+      persistOptions={{ persister }}
+      onSuccess={() => {
+        // Resume mutations after restore
+        queryClient.resumePausedMutations()
+      }}
+    >
+      <YourApp />
+    </PersistQueryClientProvider>
+  )
+}
+```
+
+**Benefits:**
+
+- Proper lifecycle management (subscribe/unsubscribe)
+- Prevents race conditions during restoration
+- Queries wait for restoration before fetching
+- Integrates with React Suspense
+
+**Props:**
+
+- `client`: QueryClient instance
+- `persistOptions`: Options for `persistQueryClient`
+- `onSuccess`: Called after successful restoration
+- `onError`: Called if restoration fails
+
+### useIsRestoring
+
+Check if restoration is in progress:
+
+```typescript
+import { useIsRestoring } from '@tanstack/react-query-persist-client'
+
+function MyComponent() {
+  const isRestoring = useIsRestoring()
+
+  if (isRestoring) {
+    return <div>Restoring cache...</div>
+  }
+
+  return <div>Ready!</div>
+}
+```
+
+## Built-in Persisters
+
+### Sync Storage Persister
+
+For synchronous storage (localStorage, sessionStorage):
+
+```typescript
+import { createSyncStoragePersister } from '@tanstack/query-sync-storage-persister'
+
+const persister = createSyncStoragePersister({
+  storage: window.localStorage,
+  key: 'MY_APP_CACHE', // default: 'REACT_QUERY_OFFLINE_CACHE'
+  throttleTime: 1000, // default: 1000ms
+  serialize: JSON.stringify, // default
+  deserialize: JSON.parse, // default
+})
+```
+
+### Async Storage Persister
+
+For asynchronous storage (AsyncStorage, IndexedDB):
+
+```typescript
+import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister'
+import AsyncStorage from '@react-native-async-storage/async-storage'
+
+const persister = createAsyncStoragePersister({
+  storage: AsyncStorage,
+  key: 'MY_APP_CACHE',
+  throttleTime: 1000,
+  serialize: JSON.stringify,
+  deserialize: JSON.parse,
+})
+```
+
+## Custom Persister
+
+Create your own persister for any storage backend:
+
+```typescript
+import { Persister, PersistedClient } from '@tanstack/react-query-persist-client'
+import { get, set, del } from 'idb-keyval'
+
+function createIDBPersister(idbKey: string = 'reactQuery'): Persister {
+  return {
+    persistClient: async (client: PersistedClient) => {
+      await set(idbKey, client)
+    },
+    restoreClient: async () => {
+      return await get<PersistedClient>(idbKey)
+    },
+    removeClient: async () => {
+      await del(idbKey)
+    },
+  }
+}
+
+const persister = createIDBPersister('my-app-cache')
+```
+
+### Persister Interface
+
+```typescript
+interface Persister {
+  persistClient(client: PersistedClient): Promise<void> | void
+  restoreClient(): Promise<PersistedClient | undefined> | PersistedClient | undefined
+  removeClient(): Promise<void> | void
+}
+
+interface PersistedClient {
+  timestamp: number
+  buster: string
+  clientState: DehydratedState
+}
+```
+
+## Advanced Examples
+
+### Persisting Specific Queries Only
+
+```typescript
+persistQueryClient({
+  queryClient,
+  persister,
+  dehydrateOptions: {
+    shouldDehydrateQuery: (query) => {
+      // Only persist queries starting with 'todos'
+      return query.queryKey[0] === 'todos'
+    },
+  },
+})
+```
+
+### Custom Serialization
+
+```typescript
+import superjson from 'superjson'
+
+const persister = createSyncStoragePersister({
+  storage: window.localStorage,
+  serialize: (data) => superjson.stringify(data),
+  deserialize: (data) => superjson.parse(data),
+})
+```
+
+This allows you to persist `Date`, `Map`, `Set`, and other non-JSON types.
+
+### Different Storage for Different Queries
+
+```typescript
+const userPersister = createSyncStoragePersister({
+  storage: window.localStorage,
+  key: 'USER_CACHE',
+})
+
+const postsPersister = createSyncStoragePersister({
+  storage: window.sessionStorage,
+  key: 'POSTS_CACHE',
+})
+
+persistQueryClient({
+  queryClient,
+  persister: userPersister,
+  dehydrateOptions: {
+    shouldDehydrateQuery: (query) => query.queryKey[0] === 'user',
+  },
+})
+
+persistQueryClient({
+  queryClient,
+  persister: postsPersister,
+  dehydrateOptions: {
+    shouldDehydrateQuery: (query) => query.queryKey[0] === 'posts',
+  },
+})
+```
+
+### Conditional Persistence
+
+```typescript
+function App() {
+  const [rememberMe, setRememberMe] = useState(false)
+
+  useEffect(() => {
+    if (rememberMe) {
+      const unsubscribe = persistQueryClient({ queryClient, persister })
+      return unsubscribe
+    }
+  }, [rememberMe])
+
+  return <YourApp />
+}
+```
+
+## Best Practices
+
+<Accordion title="Match gcTime to maxAge">
+  Always set `gcTime` to at least your persist `maxAge` value:
+
+  ```typescript
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        gcTime: 1000 * 60 * 60 * 24, // Match maxAge
+      },
+    },
+  })
+  ```
+</Accordion>
+
+<Accordion title="Use version for cache busting">
+  Invalidate cache on app updates:
+
+  ```typescript
+  import { version } from './package.json'
+
+  persistQueryClient({
+    queryClient,
+    persister,
+    buster: version,
+  })
+  ```
+</Accordion>
+
+<Accordion title="Consider storage limits">
+  localStorage has a ~5MB limit. For large caches, consider IndexedDB:
+
+  ```typescript
+  import { createIDBPersister } from './idb-persister'
+
+  const persister = createIDBPersister()
+  ```
+</Accordion>
+
+<Accordion title="Use PersistQueryClientProvider in React">
+  Prevents race conditions and integrates properly with React lifecycle:
+
+  ```typescript
+  <PersistQueryClientProvider client={queryClient} persistOptions={{ persister }}>
+    <App />
+  </PersistQueryClientProvider>
+  ```
+</Accordion>
+
+## Troubleshooting
+
+### Data not persisting
+
+1. Check that `gcTime` is high enough
+2. Verify storage is working (check browser DevTools)
+3. Ensure `persistQueryClient` is called after QueryClient creation
+4. Check for quota exceeded errors
+
+### Data not restoring
+
+1. Check `maxAge` - data may have expired
+2. Verify `buster` string matches
+3. Look for deserialization errors in console
+4. Ensure storage has data (check DevTools)
+
+### Performance issues
+
+1. Increase `throttleTime` to reduce save frequency
+2. Use `shouldDehydrateQuery` to persist less data
+3. Consider IndexedDB for large datasets
+4. Implement custom serialization for better performance
+
+## Further Reading
+
+<CardGroup cols={2}>
+  <Card title="Sync Storage Persister" href="/plugins/createSyncStoragePersister" icon="hard-drive">
+    Learn about the synchronous storage persister
+  </Card>
+
+  <Card title="Async Storage Persister" href="/plugins/createAsyncStoragePersister" icon="database">
+    Learn about the asynchronous storage persister
+  </Card>
+
+  <Card title="Hydration" href="/guides/ssr" icon="droplet">
+    Learn about dehydration and hydration
+  </Card>
+
+  <Card title="Offline Queries" href="/guides/network-mode" icon="wifi-slash">
+    Understand network modes and offline behavior
+  </Card>
+</CardGroup>

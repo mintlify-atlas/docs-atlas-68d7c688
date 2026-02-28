@@ -1,0 +1,474 @@
+---
+title: Quick Start
+description: Get started with TanStack Query in minutes
+---
+
+# Quick Start
+
+This guide will help you build your first React application with TanStack Query.
+
+## Prerequisites
+
+Make sure you have React Query installed. If not, follow the [installation guide](/frameworks/react/installation).
+
+## Basic Example
+
+<Steps>
+  <Step title="Set up the QueryClient">
+    First, create a `QueryClient` and wrap your app with `QueryClientProvider`:
+
+    ```tsx src/main.tsx
+    import React from 'react'
+    import ReactDOM from 'react-dom/client'
+    import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+    import App from './App'
+
+    const queryClient = new QueryClient()
+
+    ReactDOM.createRoot(document.getElementById('root')!).render(
+      <React.StrictMode>
+        <QueryClientProvider client={queryClient}>
+          <App />
+        </QueryClientProvider>
+      </React.StrictMode>,
+    )
+    ```
+  </Step>
+
+  <Step title="Create your first query">
+    Use the `useQuery` hook to fetch data:
+
+    ```tsx src/App.tsx
+    import { useQuery } from '@tanstack/react-query'
+
+    interface Post {
+      id: number
+      title: string
+      body: string
+    }
+
+    function App() {
+      const { data, isLoading, error } = useQuery<Post[]>({
+        queryKey: ['posts'],
+        queryFn: async () => {
+          const response = await fetch(
+            'https://jsonplaceholder.typicode.com/posts'
+          )
+          if (!response.ok) {
+            throw new Error('Network response was not ok')
+          }
+          return response.json()
+        },
+      })
+
+      if (isLoading) return <div>Loading posts...</div>
+      if (error) return <div>Error: {error.message}</div>
+
+      return (
+        <div>
+          <h1>Posts</h1>
+          <ul>
+            {data?.map((post) => (
+              <li key={post.id}>
+                <h3>{post.title}</h3>
+                <p>{post.body}</p>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )
+    }
+
+    export default App
+    ```
+  </Step>
+
+  <Step title="Run your application">
+    Start your development server and you should see the posts loading and displaying!
+
+    <Note>
+      Notice how React Query automatically handles loading states, error states, and caching for you.
+    </Note>
+  </Step>
+</Steps>
+
+## Understanding Query Keys
+
+Query keys uniquely identify queries. They can be simple strings or arrays:
+
+```tsx
+// String key
+queryKey: ['posts']
+
+// Array with parameters
+queryKey: ['posts', { page: 1, limit: 10 }]
+
+// Hierarchical keys
+queryKey: ['posts', postId, 'comments']
+```
+
+<Tip>
+  Use array keys when your query depends on parameters. React Query will automatically refetch when these parameters change.
+</Tip>
+
+## Adding Mutations
+
+Mutations are used to create, update, or delete data:
+
+```tsx
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+
+interface NewPost {
+  title: string
+  body: string
+}
+
+function CreatePost() {
+  const queryClient = useQueryClient()
+
+  const mutation = useMutation({
+    mutationFn: async (newPost: NewPost) => {
+      const response = await fetch(
+        'https://jsonplaceholder.typicode.com/posts',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(newPost),
+        }
+      )
+      return response.json()
+    },
+    onSuccess: () => {
+      // Invalidate and refetch posts query
+      queryClient.invalidateQueries({ queryKey: ['posts'] })
+    },
+  })
+
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    const formData = new FormData(e.currentTarget)
+    mutation.mutate({
+      title: formData.get('title') as string,
+      body: formData.get('body') as string,
+    })
+  }
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <input name="title" placeholder="Title" required />
+      <textarea name="body" placeholder="Body" required />
+      <button type="submit" disabled={mutation.isPending}>
+        {mutation.isPending ? 'Creating...' : 'Create Post'}
+      </button>
+      {mutation.isError && <div>Error: {mutation.error.message}</div>}
+      {mutation.isSuccess && <div>Post created successfully!</div>}
+    </form>
+  )
+}
+```
+
+## Query with Parameters
+
+Fetch data based on dynamic parameters:
+
+```tsx
+import { useQuery } from '@tanstack/react-query'
+
+interface PostDetailsProps {
+  postId: number
+}
+
+function PostDetails({ postId }: PostDetailsProps) {
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['post', postId],
+    queryFn: async () => {
+      const response = await fetch(
+        `https://jsonplaceholder.typicode.com/posts/${postId}`
+      )
+      return response.json()
+    },
+  })
+
+  if (isLoading) return <div>Loading...</div>
+  if (error) return <div>Error loading post</div>
+
+  return (
+    <article>
+      <h2>{data.title}</h2>
+      <p>{data.body}</p>
+    </article>
+  )
+}
+```
+
+<Note>
+  React Query will automatically refetch when `postId` changes because it's part of the query key.
+</Note>
+
+## Complete Example
+
+Here's a complete CRUD example:
+
+```tsx src/App.tsx
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useState } from 'react'
+
+interface Todo {
+  id: number
+  title: string
+  completed: boolean
+}
+
+const API_URL = 'https://jsonplaceholder.typicode.com/todos'
+
+function App() {
+  const queryClient = useQueryClient()
+  const [newTodo, setNewTodo] = useState('')
+
+  // Fetch todos
+  const { data: todos, isLoading } = useQuery<Todo[]>({
+    queryKey: ['todos'],
+    queryFn: async () => {
+      const response = await fetch(`${API_URL}?_limit=5`)
+      return response.json()
+    },
+  })
+
+  // Create todo
+  const createMutation = useMutation({
+    mutationFn: async (title: string) => {
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title, completed: false }),
+      })
+      return response.json()
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['todos'] })
+      setNewTodo('')
+    },
+  })
+
+  // Toggle todo
+  const toggleMutation = useMutation({
+    mutationFn: async (todo: Todo) => {
+      const response = await fetch(`${API_URL}/${todo.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ completed: !todo.completed }),
+      })
+      return response.json()
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['todos'] })
+    },
+  })
+
+  // Delete todo
+  const deleteMutation = useMutation({
+    mutationFn: async (id: number) => {
+      await fetch(`${API_URL}/${id}`, { method: 'DELETE' })
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['todos'] })
+    },
+  })
+
+  if (isLoading) return <div>Loading todos...</div>
+
+  return (
+    <div>
+      <h1>Todo List</h1>
+      
+      <form
+        onSubmit={(e) => {
+          e.preventDefault()
+          if (newTodo.trim()) {
+            createMutation.mutate(newTodo)
+          }
+        }}
+      >
+        <input
+          type="text"
+          value={newTodo}
+          onChange={(e) => setNewTodo(e.target.value)}
+          placeholder="Add a todo..."
+        />
+        <button type="submit" disabled={createMutation.isPending}>
+          {createMutation.isPending ? 'Adding...' : 'Add'}
+        </button>
+      </form>
+
+      <ul>
+        {todos?.map((todo) => (
+          <li key={todo.id}>
+            <input
+              type="checkbox"
+              checked={todo.completed}
+              onChange={() => toggleMutation.mutate(todo)}
+            />
+            <span
+              style={{
+                textDecoration: todo.completed ? 'line-through' : 'none',
+              }}
+            >
+              {todo.title}
+            </span>
+            <button
+              onClick={() => deleteMutation.mutate(todo.id)}
+              disabled={deleteMutation.isPending}
+            >
+              Delete
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+export default App
+```
+
+## Error Handling
+
+Handle errors gracefully:
+
+```tsx
+function Posts() {
+  const { data, error, isError } = useQuery({
+    queryKey: ['posts'],
+    queryFn: async () => {
+      const response = await fetch('/api/posts')
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+      return response.json()
+    },
+    retry: 3,
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
+  })
+
+  if (isError) {
+    return (
+      <div role="alert">
+        <h2>Something went wrong</h2>
+        <p>{error.message}</p>
+      </div>
+    )
+  }
+
+  return <div>{/* render data */}</div>
+}
+```
+
+<Warning>
+  Always throw errors in your `queryFn` for React Query to handle them properly. Don't catch errors unless you want to transform them.
+</Warning>
+
+## Loading States
+
+Provide better UX with detailed loading states:
+
+```tsx
+function Posts() {
+  const { data, isLoading, isFetching, isError } = useQuery({
+    queryKey: ['posts'],
+    queryFn: fetchPosts,
+  })
+
+  return (
+    <div>
+      {isFetching && <div className="loading-indicator">Updating...</div>}
+      
+      {isLoading ? (
+        <div>Loading initial data...</div>
+      ) : isError ? (
+        <div>Error loading posts</div>
+      ) : (
+        <PostsList data={data} />
+      )}
+    </div>
+  )
+}
+```
+
+<Tip>
+  Use `isLoading` for initial load and `isFetching` to show background refresh indicators.
+</Tip>
+
+## Optimistic Updates
+
+Update the UI immediately for better perceived performance:
+
+```tsx
+const mutation = useMutation({
+  mutationFn: updateTodo,
+  onMutate: async (newTodo) => {
+    // Cancel outgoing refetches
+    await queryClient.cancelQueries({ queryKey: ['todos'] })
+
+    // Snapshot previous value
+    const previousTodos = queryClient.getQueryData(['todos'])
+
+    // Optimistically update
+    queryClient.setQueryData(['todos'], (old: Todo[]) => [
+      ...old,
+      newTodo,
+    ])
+
+    // Return context with snapshot
+    return { previousTodos }
+  },
+  onError: (err, newTodo, context) => {
+    // Rollback on error
+    queryClient.setQueryData(['todos'], context?.previousTodos)
+  },
+  onSettled: () => {
+    // Refetch after error or success
+    queryClient.invalidateQueries({ queryKey: ['todos'] })
+  },
+})
+```
+
+## Query Options
+
+Use `queryOptions` for reusable, type-safe query configurations:
+
+```tsx
+import { queryOptions, useQuery } from '@tanstack/react-query'
+
+const postsQueryOptions = queryOptions({
+  queryKey: ['posts'],
+  queryFn: async () => {
+    const response = await fetch('/api/posts')
+    return response.json()
+  },
+  staleTime: 5000,
+})
+
+function Posts() {
+  const query = useQuery(postsQueryOptions)
+  return <div>...</div>
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="TypeScript" icon="code" href="/frameworks/react/typescript">
+    Add type safety to your queries and mutations
+  </Card>
+  <Card title="DevTools" icon="wrench" href="/frameworks/react/devtools">
+    Debug your queries with React Query DevTools
+  </Card>
+  <Card title="Server-Side Rendering" icon="server" href="/frameworks/react/ssr">
+    Learn about SSR with Next.js and other frameworks
+  </Card>
+  <Card title="GraphQL" icon="diagram-project" href="/frameworks/react/graphql">
+    Use React Query with GraphQL
+  </Card>
+</CardGroup>

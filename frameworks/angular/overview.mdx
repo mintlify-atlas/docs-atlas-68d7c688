@@ -1,0 +1,288 @@
+---
+title: Angular Query Overview
+description: Powerful asynchronous state management for Angular using signals
+---
+
+Angular Query provides first-class support for Angular applications using Angular's modern signals API. It enables you to fetch, cache, and update asynchronous data with zero configuration while maintaining full type safety.
+
+<Warning>
+Angular Query is currently in experimental stage. Breaking changes may occur in minor and patch releases. Lock your version to a patch-level version if using in production.
+</Warning>
+
+## What is Angular Query?
+
+Angular Query is the Angular adapter for TanStack Query. It brings powerful and flexible server state management to Angular applications through a signal-based API that integrates seamlessly with Angular's reactivity system.
+
+## Key Features
+
+<CardGroup cols={2}>
+  <Card title="Signal-Based Reactivity" icon="signal">
+    Built on Angular signals for automatic reactivity and change detection
+  </Card>
+  <Card title="Automatic Caching" icon="database">
+    Smart caching with automatic refetching, deduplication, and garbage collection
+  </Card>
+  <Card title="Type Safety" icon="shield-check">
+    Full TypeScript support with type inference from query functions
+  </Card>
+  <Card title="Developer Tools" icon="wrench">
+    Built-in devtools for debugging and monitoring queries
+  </Card>
+</CardGroup>
+
+## Core Concepts
+
+### Queries
+
+Queries are declarative dependencies on asynchronous data sources. They automatically manage loading states, errors, and data updates:
+
+```typescript
+import { Component } from '@angular/core'
+import { injectQuery } from '@tanstack/angular-query-experimental'
+
+@Component({
+  selector: 'app-user-profile',
+  template: `
+    @if (query.isPending()) {
+      <p>Loading...</p>
+    }
+    @if (query.isError()) {
+      <p>Error: {{ query.error()?.message }}</p>
+    }
+    @if (query.isSuccess()) {
+      <div>
+        <h1>{{ query.data()?.name }}</h1>
+        <p>{{ query.data()?.email }}</p>
+      </div>
+    }
+  `
+})
+export class UserProfileComponent {
+  query = injectQuery(() => ({
+    queryKey: ['user', 'profile'],
+    queryFn: async () => {
+      const response = await fetch('/api/user/profile')
+      return response.json()
+    }
+  }))
+}
+```
+
+### Mutations
+
+Mutations are used for creating, updating, or deleting data:
+
+```typescript
+import { Component } from '@angular/core'
+import { injectMutation, injectQueryClient } from '@tanstack/angular-query-experimental'
+
+@Component({
+  selector: 'app-create-post',
+  template: `
+    <form (submit)="handleSubmit()">
+      <input [(ngModel)]="title" placeholder="Post title" />
+      <button type="submit" [disabled]="mutation.isPending()">
+        {{ mutation.isPending() ? 'Creating...' : 'Create Post' }}
+      </button>
+    </form>
+    @if (mutation.isError()) {
+      <p>Error: {{ mutation.error()?.message }}</p>
+    }
+  `
+})
+export class CreatePostComponent {
+  title = ''
+  queryClient = injectQueryClient()
+  
+  mutation = injectMutation(() => ({
+    mutationFn: async (newPost: { title: string }) => {
+      const response = await fetch('/api/posts', {
+        method: 'POST',
+        body: JSON.stringify(newPost),
+        headers: { 'Content-Type': 'application/json' }
+      })
+      return response.json()
+    },
+    onSuccess: () => {
+      // Invalidate and refetch posts query
+      this.queryClient.invalidateQueries({ queryKey: ['posts'] })
+    }
+  }))
+  
+  handleSubmit() {
+    this.mutation.mutate({ title: this.title })
+  }
+}
+```
+
+### Signal Reactivity
+
+Angular Query leverages Angular's signals for automatic reactivity. The function passed to `injectQuery` runs in a reactive context, similar to Angular's `computed`:
+
+```typescript
+import { Component, signal } from '@angular/core'
+import { injectQuery } from '@tanstack/angular-query-experimental'
+
+@Component({
+  selector: 'app-todos',
+  template: `
+    <input [(ngModel)]="filter" placeholder="Filter todos" />
+    @for (todo of query.data(); track todo.id) {
+      <div>{{ todo.title }}</div>
+    }
+  `
+})
+export class TodosComponent {
+  filter = signal('')
+  
+  query = injectQuery(() => ({
+    queryKey: ['todos', this.filter()],
+    queryFn: async () => {
+      const response = await fetch(`/api/todos?filter=${this.filter()}`)
+      return response.json()
+    },
+    // Query is disabled when filter is empty
+    enabled: !!this.filter()
+  }))
+}
+```
+
+When the `filter` signal changes, the query automatically updates with the new key and refetches data.
+
+## Requirements
+
+Angular Query requires:
+
+- **Angular 16 or higher** - Uses modern Angular features including signals
+- **TypeScript 5.0+** - Full type inference and type safety
+- **@tanstack/query-core** - Core query functionality (installed automatically)
+
+## Why Angular Query?
+
+### Before Angular Query
+
+```typescript
+@Component({})
+export class UserComponent implements OnInit, OnDestroy {
+  loading = true
+  error: Error | null = null
+  user: User | null = null
+  private destroy$ = new Subject<void>()
+  
+  constructor(private http: HttpClient) {}
+  
+  ngOnInit() {
+    this.http.get<User>('/api/user')
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (user) => {
+          this.user = user
+          this.loading = false
+        },
+        error: (error) => {
+          this.error = error
+          this.loading = false
+        }
+      })
+  }
+  
+  ngOnDestroy() {
+    this.destroy$.next()
+    this.destroy$.complete()
+  }
+}
+```
+
+### With Angular Query
+
+```typescript
+@Component({})
+export class UserComponent {
+  query = injectQuery(() => ({
+    queryKey: ['user'],
+    queryFn: () => lastValueFrom(this.http.get<User>('/api/user'))
+  }))
+  
+  constructor(private http: HttpClient) {}
+}
+```
+
+Angular Query handles:
+- Loading and error states automatically
+- Automatic cleanup on component destroy
+- Smart caching and refetching
+- Request deduplication
+- Background updates
+- Automatic garbage collection
+
+## Injection Context
+
+All Angular Query hooks must be called within an injection context:
+
+<CodeGroup>
+
+```typescript Component
+@Component({})
+export class MyComponent {
+  // ✅ Called in component constructor - injection context available
+  query = injectQuery(() => ({
+    queryKey: ['data'],
+    queryFn: fetchData
+  }))
+}
+```
+
+```typescript Service
+@Injectable({ providedIn: 'root' })
+export class DataService {
+  // ✅ Called in service constructor - injection context available
+  query = injectQuery(() => ({
+    queryKey: ['data'],
+    queryFn: fetchData
+  }))
+}
+```
+
+```typescript Manual Injector
+@Component({})
+export class MyComponent {
+  private injector = inject(Injector)
+  
+  createQuery() {
+    // ✅ Explicitly provide injector
+    const query = injectQuery(
+      () => ({ queryKey: ['data'], queryFn: fetchData }),
+      { injector: this.injector }
+    )
+  }
+}
+```
+
+</CodeGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/frameworks/angular/installation">
+    Install and configure Angular Query in your project
+  </Card>
+  <Card title="Quick Start" icon="rocket" href="/frameworks/angular/quick-start">
+    Build your first query in minutes
+  </Card>
+  <Card title="DevTools" icon="code" href="/frameworks/angular/devtools">
+    Debug and monitor your queries visually
+  </Card>
+  <Card title="Guides" icon="book" href="/frameworks/angular/guides/queries">
+    Deep dive into queries, mutations, and more
+  </Card>
+</CardGroup>
+
+## Community
+
+<Tip>
+Join the TanStack Discord community to get help, share feedback, and connect with other developers using Angular Query.
+</Tip>
+
+- [GitHub Discussions](https://github.com/TanStack/query/discussions)
+- [Discord Server](https://tlinz.com/discord)
+- [Twitter](https://twitter.com/tannerlinsley)

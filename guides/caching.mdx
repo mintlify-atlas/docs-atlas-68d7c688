@@ -1,0 +1,269 @@
+---
+title: Caching Behavior
+description: Understanding TanStack Query's caching strategies and how they work
+---
+
+TanStack Query provides powerful caching mechanisms that automatically manage the lifecycle of your data. Understanding how caching works is essential to building efficient applications.
+
+## Cache Fundamentals
+
+Every query result is cached using the `queryKey` as a unique identifier. The cache stores both successful data and error states, allowing TanStack Query to provide instant responses to subsequent requests.
+
+```tsx
+import { useQuery } from '@tanstack/react-query'
+
+function Posts() {
+  // This query result is cached with key ['posts']
+  const { data } = useQuery({
+    queryKey: ['posts'],
+    queryFn: async () => {
+      const response = await fetch('https://api.example.com/posts')
+      return await response.json()
+    },
+  })
+}
+```
+
+## Stale Time
+
+The `staleTime` option determines how long cached data is considered "fresh" before it becomes stale. By default, data is immediately stale (`staleTime: 0`).
+
+<Note>
+Stale data can still be used to render your UI instantly, but TanStack Query will refetch it in the background to ensure freshness.
+</Note>
+
+```tsx
+// Data is fresh for 5 seconds
+const { data } = useQuery({
+  queryKey: ['posts'],
+  queryFn: fetchPosts,
+  staleTime: 5000,
+})
+
+// Data never becomes stale
+const { data } = useQuery({
+  queryKey: ['static-data'],
+  queryFn: fetchStaticData,
+  staleTime: Infinity,
+})
+```
+
+### Dynamic Stale Time
+
+You can compute `staleTime` dynamically based on the query:
+
+```tsx
+const { data } = useQuery({
+  queryKey: ['user', userId],
+  queryFn: () => fetchUser(userId),
+  staleTime: (query) => {
+    // Fresh for 1 minute for admin users, 5 minutes otherwise
+    return query.state.data?.role === 'admin' ? 60000 : 300000
+  },
+})
+```
+
+## Garbage Collection Time (gcTime)
+
+The `gcTime` (formerly `cacheTime`) determines how long inactive queries remain in memory before being garbage collected. The default is 5 minutes.
+
+<Steps>
+  <Step title="Query becomes inactive">
+    When all components using a query unmount, the query becomes inactive.
+  </Step>
+  
+  <Step title="Garbage collection timer starts">
+    A timer starts based on the `gcTime` value.
+  </Step>
+  
+  <Step title="Cache cleanup">
+    After the timer expires, the query data is removed from memory.
+  </Step>
+</Steps>
+
+```tsx
+import { QueryClient } from '@tanstack/react-query'
+
+// Set default gcTime for all queries
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      gcTime: 1000 * 60 * 60 * 24, // 24 hours
+    },
+  },
+})
+
+// Override for specific queries
+const { data } = useQuery({
+  queryKey: ['posts'],
+  queryFn: fetchPosts,
+  gcTime: Infinity, // Never garbage collect
+})
+```
+
+## Cache Data Access
+
+You can imperatively access cached data using `getQueryData`:
+
+```tsx
+import { useQueryClient } from '@tanstack/react-query'
+
+function Component() {
+  const queryClient = useQueryClient()
+  
+  // Read from cache
+  const cachedPosts = queryClient.getQueryData(['posts'])
+  
+  // Check if specific data is cached
+  const isPostCached = !!queryClient.getQueryData(['post', postId])
+  
+  return (
+    <a
+      href="#"
+      style={{
+        fontWeight: isPostCached ? 'bold' : 'normal',
+        color: isPostCached ? 'green' : 'inherit',
+      }}
+    >
+      View Post
+    </a>
+  )
+}
+```
+
+<Warning>
+`getQueryData` is non-reactive. Use it for imperative operations like optimistic updates, not for rendering. Use `useQuery` in components to subscribe to cache changes.
+</Warning>
+
+## Manual Cache Updates
+
+You can manually update the cache using `setQueryData`:
+
+```tsx
+const queryClient = useQueryClient()
+
+// Direct update
+queryClient.setQueryData(['posts'], (oldPosts) => [
+  ...oldPosts,
+  newPost,
+])
+
+// Update with timestamp tracking
+queryClient.setQueryData(
+  ['posts'],
+  newData,
+  { updatedAt: Date.now() }
+)
+```
+
+## Structural Sharing
+
+TanStack Query uses structural sharing by default to minimize re-renders. This means that if the new data is deeply equal to the old data, the old reference is kept.
+
+```tsx
+// Disable structural sharing if needed
+const { data } = useQuery({
+  queryKey: ['posts'],
+  queryFn: fetchPosts,
+  structuralSharing: false,
+})
+
+// Custom structural sharing logic
+const { data } = useQuery({
+  queryKey: ['posts'],
+  queryFn: fetchPosts,
+  structuralSharing: (oldData, newData) => {
+    // Your custom logic
+    return newData
+  },
+})
+```
+
+## Cache Persistence
+
+You can persist the cache to local storage or other storage mechanisms:
+
+```tsx
+import { QueryClient } from '@tanstack/react-query'
+import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client'
+import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister'
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      gcTime: 1000 * 60 * 60 * 24, // 24 hours
+    },
+  },
+})
+
+const persister = createAsyncStoragePersister({
+  storage: window.localStorage,
+})
+
+function App() {
+  return (
+    <PersistQueryClientProvider
+      client={queryClient}
+      persistOptions={{ persister }}
+    >
+      <YourApp />
+    </PersistQueryClientProvider>
+  )
+}
+```
+
+<Tip>
+Combine persistence with a long `gcTime` to create offline-capable applications that work seamlessly across page reloads.
+</Tip>
+
+## Cache Strategies
+
+### Prefetch Strategy
+
+Prefetch data before it's needed:
+
+```tsx
+const queryClient = useQueryClient()
+
+// Prefetch on hover
+const handleMouseEnter = () => {
+  queryClient.prefetchQuery({
+    queryKey: ['post', postId],
+    queryFn: () => fetchPost(postId),
+  })
+}
+```
+
+### Initial Data Strategy
+
+Seed the cache with initial data:
+
+```tsx
+const { data } = useQuery({
+  queryKey: ['post', postId],
+  queryFn: () => fetchPost(postId),
+  initialData: () => {
+    // Find post from cached list
+    return queryClient
+      .getQueryData(['posts'])
+      ?.find(post => post.id === postId)
+  },
+})
+```
+
+### Placeholder Data Strategy
+
+Show placeholder data while loading:
+
+```tsx
+const { data } = useQuery({
+  queryKey: ['post', postId],
+  queryFn: () => fetchPost(postId),
+  placeholderData: (previousData, previousQuery) => {
+    // Use data from list as placeholder
+    return queryClient
+      .getQueryData(['posts'])
+      ?.find(post => post.id === postId)
+  },
+})
+```

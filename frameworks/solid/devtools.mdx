@@ -1,0 +1,459 @@
+---
+title: Solid Query DevTools
+description: Debug and visualize your queries with TanStack Solid Query DevTools
+---
+
+# Solid Query DevTools
+
+The Solid Query DevTools provide a visual interface to inspect, debug, and manage your queries and mutations during development. They're an essential tool for understanding what's happening under the hood.
+
+## Installation
+
+Install the DevTools package as a dependency:
+
+<CodeGroup>
+
+```bash npm
+npm install @tanstack/solid-query-devtools
+```
+
+```bash pnpm
+pnpm add @tanstack/solid-query-devtools
+```
+
+```bash yarn
+yarn add @tanstack/solid-query-devtools
+```
+
+```bash bun
+bun add @tanstack/solid-query-devtools
+```
+
+</CodeGroup>
+
+## Basic Usage
+
+Add the `SolidQueryDevtools` component to your application:
+
+```tsx
+import { QueryClient, QueryClientProvider } from '@tanstack/solid-query'
+import { SolidQueryDevtools } from '@tanstack/solid-query-devtools'
+
+const queryClient = new QueryClient()
+
+function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <YourApp />
+      <SolidQueryDevtools />
+    </QueryClientProvider>
+  )
+}
+```
+
+<Note>
+The DevTools component should be placed inside the `QueryClientProvider` but can be anywhere in your component tree.
+</Note>
+
+## Features
+
+The DevTools provide comprehensive visibility into your application's query state:
+
+### Query Explorer
+
+- **View All Queries**: See all queries registered with the QueryClient
+- **Query Status**: Visual indicators for loading, success, error, and stale states
+- **Query Details**: Inspect query data, error messages, and metadata
+- **Cache Time**: See when queries were last fetched and when they'll be garbage collected
+
+### Query Actions
+
+- **Refetch**: Manually trigger a refetch for any query
+- **Invalidate**: Invalidate queries to mark them as stale
+- **Reset**: Reset queries to their initial state
+- **Remove**: Remove queries from the cache
+
+### Mutation Tracking
+
+- **Active Mutations**: Monitor mutations in progress
+- **Mutation History**: Review completed mutations and their results
+- **Mutation State**: See pending, success, and error states
+
+## Configuration Options
+
+Customize the DevTools appearance and behavior:
+
+```tsx
+import { SolidQueryDevtools } from '@tanstack/solid-query-devtools'
+
+function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <YourApp />
+      <SolidQueryDevtools
+        initialIsOpen={false}
+        position="bottom-right"
+        buttonPosition="bottom-right"
+      />
+    </QueryClientProvider>
+  )
+}
+```
+
+### Available Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `initialIsOpen` | `boolean` | `false` | Whether the DevTools are open by default |
+| `position` | `'top-left' \| 'top-right' \| 'bottom-left' \| 'bottom-right'` | `'bottom-left'` | Position of the DevTools panel |
+| `buttonPosition` | `'top-left' \| 'top-right' \| 'bottom-left' \| 'bottom-right'` | `'bottom-left'` | Position of the toggle button |
+| `client` | `QueryClient` | Uses context | Specific QueryClient to use |
+
+## DevTools Panel
+
+For more control, use the `SolidQueryDevtoolsPanel` component:
+
+```tsx
+import { SolidQueryDevtoolsPanel } from '@tanstack/solid-query-devtools'
+import { createSignal, Show } from 'solid-js'
+
+function App() {
+  const [showDevtools, setShowDevtools] = createSignal(false)
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <YourApp />
+      
+      <button onClick={() => setShowDevtools(!showDevtools())}>
+        Toggle DevTools
+      </button>
+      
+      <Show when={showDevtools()}>
+        <SolidQueryDevtoolsPanel />
+      </Show>
+    </QueryClientProvider>
+  )
+}
+```
+
+### Panel Options
+
+The panel component accepts additional configuration:
+
+```tsx
+import type { DevtoolsPanelOptions } from '@tanstack/solid-query-devtools'
+
+const options: DevtoolsPanelOptions = {
+  // Customize panel behavior
+  showQueryGlobalBackground: true,
+  // Other panel-specific options
+}
+
+<SolidQueryDevtoolsPanel {...options} />
+```
+
+## Production Builds
+
+<Warning>
+DevTools are automatically tree-shaken from production builds when using the default import.
+</Warning>
+
+The DevTools check `isDev` from `solid-js/web` and return `null` in production:
+
+```tsx
+import { isDev } from 'solid-js/web'
+
+export const SolidQueryDevtools = isDev
+  ? clientOnly(() => import('./devtools'))
+  : function () {
+      return null
+    }
+```
+
+This ensures DevTools code is never included in production bundles.
+
+## Development Only Usage
+
+If you want to ensure DevTools are only available in development:
+
+```tsx
+import { QueryClientProvider } from '@tanstack/solid-query'
+import { SolidQueryDevtools } from '@tanstack/solid-query-devtools'
+
+function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <YourApp />
+      {/* DevTools automatically excluded in production */}
+      <SolidQueryDevtools />
+    </QueryClientProvider>
+  )
+}
+```
+
+## Debugging Queries
+
+### Inspecting Query State
+
+Use the DevTools to inspect detailed query information:
+
+1. **Data Tab**: View the current data in the cache
+2. **Query Tab**: See query configuration and options
+3. **Observers Tab**: Monitor active observers subscribed to the query
+4. **Actions**: Perform manual operations on queries
+
+### Monitoring Fetch Behavior
+
+Track when queries refetch:
+
+```tsx
+import { useQuery } from '@tanstack/solid-query'
+
+function Component() {
+  const query = useQuery(() => ({
+    queryKey: ['todos'],
+    queryFn: fetchTodos,
+    // Use DevTools to observe this behavior
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+    refetchInterval: 10000,
+  }))
+
+  // Open DevTools to see refetch indicators
+  return <div>{query.data?.length} todos</div>
+}
+```
+
+### Debugging Cache Behavior
+
+Understand cache timing:
+
+```tsx
+const query = useQuery(() => ({
+  queryKey: ['data'],
+  queryFn: fetchData,
+  // Monitor these in DevTools
+  staleTime: 5 * 60 * 1000,  // Data stays fresh for 5 minutes
+  gcTime: 10 * 60 * 1000,    // Inactive data cached for 10 minutes
+}))
+```
+
+The DevTools show:
+- When data becomes stale
+- When inactive queries are scheduled for garbage collection
+- Active observers keeping queries alive
+
+## Mutation Debugging
+
+Track mutation lifecycle:
+
+```tsx
+import { useMutation, useQueryClient } from '@tanstack/solid-query'
+
+function CreateTodo() {
+  const queryClient = useQueryClient()
+  
+  const mutation = useMutation(() => ({
+    mutationFn: createTodo,
+    // DevTools show each stage
+    onMutate: (variables) => {
+      console.log('Mutation started:', variables)
+    },
+    onError: (error) => {
+      console.log('Mutation failed:', error)
+    },
+    onSuccess: (data) => {
+      console.log('Mutation succeeded:', data)
+    },
+    onSettled: () => {
+      console.log('Mutation completed')
+    },
+  }))
+
+  return (
+    <button onClick={() => mutation.mutate({ title: 'New' })}>
+      Create Todo
+    </button>
+  )
+}
+```
+
+The DevTools display:
+- Active mutations and their status
+- Mutation variables and results
+- Error messages for failed mutations
+
+## Query Cache Exploration
+
+Inspect the entire cache state:
+
+```tsx
+import { useQueryClient } from '@tanstack/solid-query'
+
+function DebugPanel() {
+  const queryClient = useQueryClient()
+  
+  return (
+    <div>
+      <button onClick={() => {
+        // Inspect cache programmatically
+        const cache = queryClient.getQueryCache()
+        console.log('All queries:', cache.getAll())
+        console.log('Active queries:', cache.findAll({ type: 'active' }))
+        console.log('Stale queries:', cache.findAll({ stale: true }))
+      }}>
+        Log Cache State
+      </button>
+    </div>
+  )
+}
+```
+
+## Performance Monitoring
+
+Use DevTools to identify performance issues:
+
+### Over-fetching Detection
+
+Identify queries that refetch too frequently:
+
+1. Open DevTools
+2. Watch the "Last Updated" column
+3. Look for queries updating more often than necessary
+4. Adjust `staleTime` accordingly
+
+### Memory Leaks
+
+Spot queries that aren't being garbage collected:
+
+1. Check the "Observers" count
+2. Look for inactive queries with high observer counts
+3. Ensure proper cleanup in components
+
+### Unnecessary Renders
+
+Identify components re-rendering due to query updates:
+
+```tsx
+import { useQuery } from '@tanstack/solid-query'
+
+function Component() {
+  const query = useQuery(() => ({
+    queryKey: ['data'],
+    queryFn: fetchData,
+    // Use select to prevent unnecessary renders
+    select: (data) => data.specificField,
+  }))
+
+  // Component only re-renders when specificField changes
+  return <div>{query.data}</div>
+}
+```
+
+## Keyboard Shortcuts
+
+When DevTools are open:
+
+- **Escape**: Close DevTools
+- **Click Logo**: Toggle DevTools panel
+
+## Best Practices
+
+<Tip>
+Follow these best practices when using DevTools:
+</Tip>
+
+1. **Keep DevTools Open**: During development, keep DevTools visible to monitor query behavior
+
+2. **Check Query Keys**: Verify query keys are correctly structured and unique
+
+3. **Monitor Refetch Behavior**: Ensure queries aren't refetching unnecessarily
+
+4. **Inspect Error States**: Use DevTools to debug query and mutation errors
+
+5. **Validate Cache Strategy**: Confirm `staleTime` and `gcTime` are appropriate
+
+6. **Track Mutations**: Monitor mutation success/failure rates
+
+## Troubleshooting
+
+### DevTools Not Showing
+
+If DevTools don't appear:
+
+1. **Check Import**: Ensure you're importing from `@tanstack/solid-query-devtools`
+2. **Verify Provider**: DevTools must be inside `QueryClientProvider`
+3. **Development Mode**: Confirm you're running in development mode
+4. **Position**: Check if DevTools are off-screen due to positioning
+
+### Performance Impact
+
+<Note>
+DevTools are optimized for minimal performance impact, but they do add overhead. They're automatically excluded from production builds.
+</Note>
+
+### Multiple Query Clients
+
+If using multiple QueryClients:
+
+```tsx
+function App() {
+  const client1 = new QueryClient()
+  const client2 = new QueryClient()
+
+  return (
+    <>
+      <QueryClientProvider client={client1}>
+        <Section1 />
+        <SolidQueryDevtools client={client1} position="top-left" />
+      </QueryClientProvider>
+      
+      <QueryClientProvider client={client2}>
+        <Section2 />
+        <SolidQueryDevtools client={client2} position="bottom-left" />
+      </QueryClientProvider>
+    </>
+  )
+}
+```
+
+## Custom DevTools Integration
+
+For advanced use cases, access the underlying DevTools API:
+
+```tsx
+import { useQueryClient } from '@tanstack/solid-query'
+
+function CustomDebugger() {
+  const queryClient = useQueryClient()
+  
+  return (
+    <div>
+      <button onClick={() => {
+        // Access query cache directly
+        const cache = queryClient.getQueryCache()
+        const allQueries = cache.getAll()
+        
+        allQueries.forEach(query => {
+          console.log('Query Key:', query.queryKey)
+          console.log('State:', query.state)
+          console.log('Observers:', query.getObserversCount())
+        })
+      }}>
+        Log All Queries
+      </button>
+    </div>
+  )
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Overview" icon="book" href="/frameworks/solid/overview">
+    Learn about Solid Query core concepts
+  </Card>
+  <Card title="TypeScript" icon="code" href="/frameworks/solid/typescript">
+    Explore TypeScript integration
+  </Card>
+</CardGroup>

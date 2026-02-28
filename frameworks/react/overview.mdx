@@ -1,0 +1,277 @@
+---
+title: React Query Overview
+description: Powerful asynchronous state management for React applications
+---
+
+# React Query Overview
+
+TanStack Query (formerly React Query) is a powerful library for managing, caching, and synchronizing asynchronous and remote data in React applications. It provides hooks that make fetching, caching, synchronizing, and updating server state simple and efficient.
+
+## Why React Query?
+
+React Query eliminates the need to manually manage loading states, error states, and cache invalidation. It provides:
+
+- **Automatic caching** - Intelligently caches your data with configurable retention
+- **Background refetching** - Keeps data fresh automatically
+- **Request deduplication** - Multiple components using the same query share a single request
+- **Optimistic updates** - Update UI before server response for better UX
+- **Infinite scroll support** - Built-in pagination and infinite query support
+- **DevTools** - Powerful debugging tools for development
+
+## Core Concepts
+
+### Queries
+
+Queries are declarative dependencies on asynchronous data sources. Use the `useQuery` hook to fetch data:
+
+```tsx
+import { useQuery } from '@tanstack/react-query'
+
+function Posts() {
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['posts'],
+    queryFn: async () => {
+      const response = await fetch('/api/posts')
+      return response.json()
+    },
+  })
+
+  if (isLoading) return <div>Loading...</div>
+  if (error) return <div>Error: {error.message}</div>
+
+  return (
+    <ul>
+      {data.map((post) => (
+        <li key={post.id}>{post.title}</li>
+      ))}
+    </ul>
+  )
+}
+```
+
+### Mutations
+
+Mutations are used for create, update, and delete operations. Use the `useMutation` hook:
+
+```tsx
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+
+function CreatePost() {
+  const queryClient = useQueryClient()
+  
+  const mutation = useMutation({
+    mutationFn: (newPost) => {
+      return fetch('/api/posts', {
+        method: 'POST',
+        body: JSON.stringify(newPost),
+      })
+    },
+    onSuccess: () => {
+      // Invalidate and refetch
+      queryClient.invalidateQueries({ queryKey: ['posts'] })
+    },
+  })
+
+  return (
+    <button onClick={() => mutation.mutate({ title: 'New Post' })}>
+      {mutation.isPending ? 'Creating...' : 'Create Post'}
+    </button>
+  )
+}
+```
+
+### Query Client
+
+The `QueryClient` manages all queries and mutations. Wrap your app with `QueryClientProvider`:
+
+```tsx
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+
+const queryClient = new QueryClient()
+
+function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <YourApp />
+    </QueryClientProvider>
+  )
+}
+```
+
+## Key Features
+
+<Steps>
+  <Step title="Query Keys">
+    Query keys uniquely identify queries. They can be strings or arrays:
+    
+    ```tsx
+    // Simple key
+    queryKey: ['posts']
+    
+    // With parameters
+    queryKey: ['posts', { userId: 1 }]
+    
+    // Nested keys
+    queryKey: ['posts', postId, 'comments']
+    ```
+  </Step>
+
+  <Step title="Stale Time">
+    Configure how long data stays fresh before refetching:
+    
+    ```tsx
+    useQuery({
+      queryKey: ['posts'],
+      queryFn: fetchPosts,
+      staleTime: 5000, // 5 seconds
+    })
+    ```
+  </Step>
+
+  <Step title="Cache Time">
+    Control how long unused data stays in cache:
+    
+    ```tsx
+    useQuery({
+      queryKey: ['posts'],
+      queryFn: fetchPosts,
+      gcTime: 10 * 60 * 1000, // 10 minutes
+    })
+    ```
+  </Step>
+</Steps>
+
+## Query States
+
+React Query provides detailed status information:
+
+| Property | Description |
+|----------|-------------|
+| `isLoading` | Query is fetching for the first time |
+| `isPending` | Query has no data yet |
+| `isError` | Query encountered an error |
+| `isSuccess` | Query has data |
+| `isFetching` | Query is fetching (including background refetch) |
+| `data` | The actual data from the query |
+| `error` | Error object if query failed |
+
+```tsx
+const { data, isLoading, isError, error, isFetching } = useQuery({
+  queryKey: ['posts'],
+  queryFn: fetchPosts,
+})
+
+if (isLoading) return <Spinner />
+if (isError) return <ErrorMessage error={error} />
+
+return (
+  <div>
+    {isFetching && <RefreshIndicator />}
+    <PostsList data={data} />
+  </div>
+)
+```
+
+<Note>
+  The difference between `isLoading` and `isPending`: `isLoading` is `true` only during the first fetch, while `isPending` is `true` whenever there's no data yet.
+</Note>
+
+## Automatic Refetching
+
+React Query automatically refetches data in several scenarios:
+
+- **On mount** - When a component mounts
+- **On window focus** - When the user returns to the tab
+- **On network reconnect** - When internet connection is restored
+- **On interval** - At a specified interval if configured
+
+```tsx
+useQuery({
+  queryKey: ['posts'],
+  queryFn: fetchPosts,
+  refetchOnWindowFocus: true,
+  refetchOnMount: true,
+  refetchInterval: 30000, // Refetch every 30 seconds
+})
+```
+
+<Warning>
+  Avoid setting very short `refetchInterval` values in production as this can lead to unnecessary server load and increased costs.
+</Warning>
+
+## Dependent Queries
+
+Enable queries conditionally based on other data:
+
+```tsx
+function User({ userId }) {
+  const { data: user } = useQuery({
+    queryKey: ['user', userId],
+    queryFn: () => fetchUser(userId),
+  })
+
+  const { data: projects } = useQuery({
+    queryKey: ['projects', user?.id],
+    queryFn: () => fetchProjects(user.id),
+    enabled: !!user?.id, // Only run when user.id exists
+  })
+
+  return <div>...</div>
+}
+```
+
+## Parallel Queries
+
+Fetch multiple queries simultaneously:
+
+```tsx
+function Dashboard() {
+  const users = useQuery({ queryKey: ['users'], queryFn: fetchUsers })
+  const posts = useQuery({ queryKey: ['posts'], queryFn: fetchPosts })
+  const comments = useQuery({ queryKey: ['comments'], queryFn: fetchComments })
+
+  if (users.isLoading || posts.isLoading || comments.isLoading) {
+    return <Loading />
+  }
+
+  return <div>...</div>
+}
+```
+
+Or use `useQueries` for dynamic parallel queries:
+
+```tsx
+import { useQueries } from '@tanstack/react-query'
+
+function MultipleUsers({ userIds }) {
+  const results = useQueries({
+    queries: userIds.map((id) => ({
+      queryKey: ['user', id],
+      queryFn: () => fetchUser(id),
+    })),
+  })
+
+  return <div>...</div>
+}
+```
+
+<Tip>
+  React Query automatically handles request deduplication, so if multiple components request the same data, only one network request is made.
+</Tip>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/frameworks/react/installation">
+    Install and configure React Query in your project
+  </Card>
+  <Card title="Quick Start" icon="rocket" href="/frameworks/react/quick-start">
+    Build your first React Query app
+  </Card>
+  <Card title="TypeScript" icon="code" href="/frameworks/react/typescript">
+    Learn about type-safe queries and mutations
+  </Card>
+  <Card title="DevTools" icon="wrench" href="/frameworks/react/devtools">
+    Debug your queries with React Query DevTools
+  </Card>
+</CardGroup>

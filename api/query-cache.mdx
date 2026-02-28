@@ -1,0 +1,376 @@
+---
+title: QueryCache
+description: The QueryCache stores and manages all Query instances.
+---
+
+## Overview
+
+The `QueryCache` is responsible for storing and managing all `Query` instances. It provides methods to build, access, and manipulate queries, and emits events when queries are added, removed, or updated.
+
+## Constructor
+
+```typescript
+const queryCache = new QueryCache(config?: QueryCacheConfig)
+```
+
+<ParamField path="config" type="QueryCacheConfig" optional>
+  Configuration options for the QueryCache
+  
+  <Expandable title="properties">
+    <ParamField path="onError" type="(error: DefaultError, query: Query) => void" optional>
+      Global error handler called when any query errors
+    </ParamField>
+    
+    <ParamField path="onSuccess" type="(data: unknown, query: Query) => void" optional>
+      Global success handler called when any query succeeds
+    </ParamField>
+    
+    <ParamField path="onSettled" type="(data: unknown | undefined, error: DefaultError | null, query: Query) => void" optional>
+      Global settled handler called when any query completes (success or error)
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+**Example:**
+
+```typescript
+const queryCache = new QueryCache({
+  onError: (error, query) => {
+    console.error('Query error:', error, 'Query key:', query.queryKey)
+  },
+  onSuccess: (data, query) => {
+    console.log('Query success:', query.queryKey)
+  },
+})
+```
+
+## Methods
+
+### build()
+
+Builds or retrieves a query instance.
+
+```typescript
+const query = queryCache.build<TQueryFnData, TError, TData, TQueryKey>(
+  client: QueryClient,
+  options: QueryOptions<TQueryFnData, TError, TData, TQueryKey>,
+  state?: QueryState<TData, TError>
+): Query<TQueryFnData, TError, TData, TQueryKey>
+```
+
+<ParamField path="client" type="QueryClient" required>
+  The QueryClient instance
+</ParamField>
+
+<ParamField path="options" type="QueryOptions" required>
+  Query options including queryKey
+</ParamField>
+
+<ParamField path="state" type="QueryState" optional>
+  Initial state for the query
+</ParamField>
+
+**Returns:** A `Query` instance
+
+<Note>
+  If a query with the same hash already exists, it returns the existing query. Otherwise, creates a new one.
+</Note>
+
+### add()
+
+Adds a query to the cache.
+
+```typescript
+queryCache.add(query: Query): void
+```
+
+<ParamField path="query" type="Query" required>
+  The query instance to add
+</ParamField>
+
+<Note>
+  This method is typically called internally by the `build()` method.
+</Note>
+
+### remove()
+
+Removes a query from the cache and destroys it.
+
+```typescript
+queryCache.remove(query: Query): void
+```
+
+<ParamField path="query" type="Query" required>
+  The query instance to remove
+</ParamField>
+
+### clear()
+
+Removes all queries from the cache.
+
+```typescript
+queryCache.clear(): void
+```
+
+**Example:**
+
+```typescript
+queryCache.clear()
+```
+
+### get()
+
+Retrieves a query from the cache by its hash.
+
+```typescript
+const query = queryCache.get<TQueryFnData, TError, TData, TQueryKey>(
+  queryHash: string
+): Query<TQueryFnData, TError, TData, TQueryKey> | undefined
+```
+
+<ParamField path="queryHash" type="string" required>
+  The hash of the query to retrieve
+</ParamField>
+
+**Returns:** The `Query` instance or `undefined` if not found
+
+**Example:**
+
+```typescript
+const query = queryCache.get('["\'todos\'"]')
+```
+
+### getAll()
+
+Returns all queries in the cache.
+
+```typescript
+const queries = queryCache.getAll(): Array<Query>
+```
+
+**Returns:** Array of all `Query` instances
+
+**Example:**
+
+```typescript
+const allQueries = queryCache.getAll()
+console.log(`Total queries: ${allQueries.length}`)
+```
+
+### find()
+
+Finds a single query that matches the filters.
+
+```typescript
+const query = queryCache.find<TQueryFnData, TError, TData>(
+  filters: QueryFilters
+): Query<TQueryFnData, TError, TData> | undefined
+```
+
+<ParamField path="filters" type="QueryFilters" required>
+  Filters to match queries
+  
+  <Expandable title="properties">
+    <ParamField path="queryKey" type="QueryKey" required>
+      Query key to filter by
+    </ParamField>
+    
+    <ParamField path="exact" type="boolean" optional>
+      Match query key exactly. Defaults to `true` for `find()`.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+**Returns:** The first matching `Query` or `undefined`
+
+**Example:**
+
+```typescript
+const todoQuery = queryCache.find({ queryKey: ['todos', 1], exact: true })
+```
+
+### findAll()
+
+Finds all queries that match the filters.
+
+```typescript
+const queries = queryCache.findAll(filters?: QueryFilters): Array<Query>
+```
+
+<ParamField path="filters" type="QueryFilters" optional>
+  Filters to match queries
+  
+  <Expandable title="properties">
+    <ParamField path="queryKey" type="QueryKey" optional>
+      Filter by query key (partial match by default)
+    </ParamField>
+    
+    <ParamField path="exact" type="boolean" optional>
+      Match query key exactly. Defaults to `false`.
+    </ParamField>
+    
+    <ParamField path="type" type="'active' | 'inactive' | 'all'" optional>
+      Filter by query type
+    </ParamField>
+    
+    <ParamField path="stale" type="boolean" optional>
+      Filter by stale status
+    </ParamField>
+    
+    <ParamField path="fetchStatus" type="'fetching' | 'paused' | 'idle'" optional>
+      Filter by fetch status
+    </ParamField>
+    
+    <ParamField path="predicate" type="(query: Query) => boolean" optional>
+      Custom predicate function
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+**Returns:** Array of matching `Query` instances
+
+**Example:**
+
+```typescript
+// Find all queries with 'todos' in the key
+const todoQueries = queryCache.findAll({ queryKey: ['todos'] })
+
+// Find all stale queries
+const staleQueries = queryCache.findAll({ stale: true })
+
+// Find all fetching queries
+const fetchingQueries = queryCache.findAll({ fetchStatus: 'fetching' })
+```
+
+### notify()
+
+Notifies all subscribers of a cache event.
+
+```typescript
+queryCache.notify(event: QueryCacheNotifyEvent): void
+```
+
+<ParamField path="event" type="QueryCacheNotifyEvent" required>
+  The event to notify subscribers about
+  
+  <Expandable title="event types">
+    <ResponseField name="added" type="object">
+      Emitted when a query is added to the cache
+      <Expandable title="properties">
+        <ResponseField name="type" type="'added'" />
+        <ResponseField name="query" type="Query" />
+      </Expandable>
+    </ResponseField>
+    
+    <ResponseField name="removed" type="object">
+      Emitted when a query is removed from the cache
+      <Expandable title="properties">
+        <ResponseField name="type" type="'removed'" />
+        <ResponseField name="query" type="Query" />
+      </Expandable>
+    </ResponseField>
+    
+    <ResponseField name="updated" type="object">
+      Emitted when a query is updated
+      <Expandable title="properties">
+        <ResponseField name="type" type="'updated'" />
+        <ResponseField name="query" type="Query" />
+        <ResponseField name="action" type="Action" />
+      </Expandable>
+    </ResponseField>
+    
+    <ResponseField name="observerAdded" type="object">
+      Emitted when an observer is added to a query
+    </ResponseField>
+    
+    <ResponseField name="observerRemoved" type="object">
+      Emitted when an observer is removed from a query
+    </ResponseField>
+    
+    <ResponseField name="observerResultsUpdated" type="object">
+      Emitted when observer results are updated
+    </ResponseField>
+    
+    <ResponseField name="observerOptionsUpdated" type="object">
+      Emitted when observer options are updated
+    </ResponseField>
+  </Expandable>
+</ParamField>
+
+### subscribe()
+
+Subscribes to cache events.
+
+```typescript
+const unsubscribe = queryCache.subscribe(
+  listener: (event: QueryCacheNotifyEvent) => void
+): () => void
+```
+
+<ParamField path="listener" type="(event: QueryCacheNotifyEvent) => void" required>
+  Callback function to handle cache events
+</ParamField>
+
+**Returns:** Function to unsubscribe
+
+**Example:**
+
+```typescript
+const unsubscribe = queryCache.subscribe((event) => {
+  if (event.type === 'added') {
+    console.log('Query added:', event.query.queryKey)
+  }
+  if (event.type === 'updated') {
+    console.log('Query updated:', event.query.queryKey)
+  }
+})
+
+// Later, unsubscribe
+unsubscribe()
+```
+
+### onFocus()
+
+Called when the window regains focus. Triggers focus events on all queries.
+
+```typescript
+queryCache.onFocus(): void
+```
+
+<Note>
+  This method is typically called automatically by the QueryClient.
+</Note>
+
+### onOnline()
+
+Called when the network comes back online. Triggers online events on all queries.
+
+```typescript
+queryCache.onOnline(): void
+```
+
+<Note>
+  This method is typically called automatically by the QueryClient.
+</Note>
+
+## Events
+
+The QueryCache emits the following events:
+
+- `added` - When a query is added to the cache
+- `removed` - When a query is removed from the cache
+- `updated` - When a query's state changes
+- `observerAdded` - When an observer subscribes to a query
+- `observerRemoved` - When an observer unsubscribes from a query
+- `observerResultsUpdated` - When observer results are updated
+- `observerOptionsUpdated` - When observer options are updated
+
+## Usage with QueryClient
+
+```typescript
+const queryCache = new QueryCache()
+
+const queryClient = new QueryClient({
+  queryCache,
+})
+```

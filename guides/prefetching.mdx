@@ -1,0 +1,394 @@
+---
+title: Prefetching
+description: Load data before it's needed to provide instant user experiences
+---
+
+Prefetching allows you to fetch and cache data before a user needs it, creating instant page transitions and eliminating loading states.
+
+## Basic Prefetching
+
+Use `prefetchQuery` to load data into the cache:
+
+```tsx
+import { useQueryClient } from '@tanstack/react-query'
+
+function Todos() {
+  const queryClient = useQueryClient()
+
+  return (
+    <div>
+      <ul>
+        {todos.map(todo => (
+          <li
+            key={todo.id}
+            onMouseEnter={() => {
+              // Prefetch the todo details on hover
+              queryClient.prefetchQuery({
+                queryKey: ['todo', todo.id],
+                queryFn: () => fetchTodo(todo.id)
+              })
+            }}
+          >
+            <Link to={`/todos/${todo.id}`}>
+              {todo.title}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+```
+
+<Tip>
+Prefetching on hover or mouseEnter provides data before the user clicks, making navigation feel instant.
+</Tip>
+
+## prefetchQuery API
+
+The `prefetchQuery` method has the same signature as `fetchQuery` but doesn't return data:
+
+```ts
+prefetchQuery<
+  TQueryFnData = unknown,
+  TError = DefaultError,
+  TData = TQueryFnData,
+  TQueryKey extends QueryKey = QueryKey,
+>(options: FetchQueryOptions): Promise<void>
+```
+
+Source: packages/query-core/src/queryClient.ts:372
+
+## Prefetch Options
+
+Configure how prefetched data behaves:
+
+```tsx
+import { useQueryClient } from '@tanstack/react-query'
+
+function prefetchTodo(id: number) {
+  const queryClient = useQueryClient()
+
+  await queryClient.prefetchQuery({
+    queryKey: ['todo', id],
+    queryFn: () => fetchTodo(id),
+    staleTime: 10 * 1000, // Consider fresh for 10 seconds
+  })
+}
+```
+
+<Steps>
+  <Step title="Query is fetched">
+    Data is fetched and stored in the cache
+  </Step>
+  <Step title="Cache entry created">
+    A cache entry is created with the specified options
+  </Step>
+  <Step title="Data becomes available">
+    When the component mounts, data is instantly available
+  </Step>
+</Steps>
+
+## Prefetching in Route Loaders
+
+Prefetch data in route loaders for instant navigation:
+
+```tsx
+import { QueryClient } from '@tanstack/react-query'
+import { LoaderFunctionArgs } from 'react-router-dom'
+
+const queryClient = new QueryClient()
+
+export const todoLoader = (queryClient: QueryClient) => 
+  async ({ params }: LoaderFunctionArgs) => {
+    const todoId = parseInt(params.todoId!)
+    
+    await queryClient.prefetchQuery({
+      queryKey: ['todo', todoId],
+      queryFn: () => fetchTodo(todoId)
+    })
+    
+    return null
+  }
+
+// In your route config:
+const router = createBrowserRouter([
+  {
+    path: '/todos/:todoId',
+    loader: todoLoader(queryClient),
+    element: <TodoDetail />
+  }
+])
+```
+
+## Prefetch on User Intent
+
+Prefetch based on user behavior patterns:
+
+```tsx
+function TodoList() {
+  const queryClient = useQueryClient()
+  const [focusedId, setFocusedId] = useState<number | null>(null)
+
+  useEffect(() => {
+    if (focusedId !== null) {
+      // Prefetch when user focuses on an item (keyboard navigation)
+      queryClient.prefetchQuery({
+        queryKey: ['todo', focusedId],
+        queryFn: () => fetchTodo(focusedId)
+      })
+    }
+  }, [focusedId, queryClient])
+
+  return (
+    <ul>
+      {todos.map(todo => (
+        <li
+          key={todo.id}
+          tabIndex={0}
+          onFocus={() => setFocusedId(todo.id)}
+          onBlur={() => setFocusedId(null)}
+        >
+          {todo.title}
+        </li>
+      ))}
+    </ul>
+  )
+}
+```
+
+## Prefetch Infinite Queries
+
+Prefetch infinite queries using `prefetchInfiniteQuery`:
+
+```tsx
+import { useQueryClient } from '@tanstack/react-query'
+
+function ProjectList() {
+  const queryClient = useQueryClient()
+
+  const prefetchProjects = () => {
+    queryClient.prefetchInfiniteQuery({
+      queryKey: ['projects'],
+      queryFn: ({ pageParam = 0 }) => fetchProjects(pageParam),
+      initialPageParam: 0,
+      getNextPageParam: (lastPage) => lastPage.nextCursor,
+      pages: 3 // Prefetch first 3 pages
+    })
+  }
+
+  return (
+    <button onMouseEnter={prefetchProjects}>
+      View Projects
+    </button>
+  )
+}
+```
+
+Source: packages/query-core/src/queryClient.ts:407
+
+## Conditional Prefetching
+
+Only prefetch when data isn't already cached:
+
+```tsx
+import { useQueryClient } from '@tanstack/react-query'
+
+function TodoLink({ id }: { id: number }) {
+  const queryClient = useQueryClient()
+
+  const handlePrefetch = () => {
+    const cached = queryClient.getQueryData(['todo', id])
+    
+    if (!cached) {
+      // Only prefetch if not in cache
+      queryClient.prefetchQuery({
+        queryKey: ['todo', id],
+        queryFn: () => fetchTodo(id)
+      })
+    }
+  }
+
+  return (
+    <a href={`/todos/${id}`} onMouseEnter={handlePrefetch}>
+      View Todo
+    </a>
+  )
+}
+```
+
+<Note>
+Prefetching automatically respects `staleTime`. If data exists and isn't stale, it won't refetch.
+</Note>
+
+## Prefetch with Dependencies
+
+Prefetch related data together:
+
+```tsx
+import { useQueryClient } from '@tanstack/react-query'
+
+function ProjectCard({ projectId }: { projectId: number }) {
+  const queryClient = useQueryClient()
+
+  const prefetchProject = async () => {
+    // Prefetch project details
+    await queryClient.prefetchQuery({
+      queryKey: ['project', projectId],
+      queryFn: () => fetchProject(projectId)
+    })
+
+    // Prefetch project tasks
+    await queryClient.prefetchQuery({
+      queryKey: ['tasks', { projectId }],
+      queryFn: () => fetchProjectTasks(projectId)
+    })
+
+    // Prefetch project members
+    await queryClient.prefetchQuery({
+      queryKey: ['members', { projectId }],
+      queryFn: () => fetchProjectMembers(projectId)
+    })
+  }
+
+  return (
+    <div onMouseEnter={prefetchProject}>
+      Project #{projectId}
+    </div>
+  )
+}
+```
+
+## Experimental: Prefetch in Render
+
+Enable prefetching during component rendering (experimental):
+
+```tsx
+import { useQuery } from '@tanstack/react-query'
+import { QueryClient } from '@tanstack/react-query'
+
+// Enable globally
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      experimental_prefetchInRender: true,
+    },
+  },
+})
+
+// Or per query
+function Todo({ id }) {
+  const { data } = useQuery({
+    queryKey: ['todo', id],
+    queryFn: () => fetchTodo(id),
+    experimental_prefetchInRender: true
+  })
+
+  return <div>{data?.title}</div>
+}
+```
+
+<Warning>
+The `experimental_prefetchInRender` feature is experimental and may change in future versions. It allows queries to start fetching during render instead of waiting for useEffect.
+</Warning>
+
+Source: packages/query-core/src/types.ts:438
+
+## Prefetch Strategies
+
+### On Mount
+
+Prefetch when a parent component mounts:
+
+```tsx
+function Dashboard() {
+  const queryClient = useQueryClient()
+
+  useEffect(() => {
+    // Prefetch common data when dashboard loads
+    queryClient.prefetchQuery({
+      queryKey: ['user-stats'],
+      queryFn: fetchUserStats
+    })
+    queryClient.prefetchQuery({
+      queryKey: ['notifications'],
+      queryFn: fetchNotifications
+    })
+  }, [queryClient])
+
+  return <div>Dashboard</div>
+}
+```
+
+### On Interaction
+
+Prefetch on specific user interactions:
+
+```tsx
+function SearchInput() {
+  const queryClient = useQueryClient()
+  const [query, setQuery] = useState('')
+
+  const handleFocus = () => {
+    // Prefetch popular searches when user focuses input
+    queryClient.prefetchQuery({
+      queryKey: ['popular-searches'],
+      queryFn: fetchPopularSearches
+    })
+  }
+
+  return (
+    <input
+      type="text"
+      value={query}
+      onChange={(e) => setQuery(e.target.value)}
+      onFocus={handleFocus}
+    />
+  )
+}
+```
+
+### On Scroll
+
+Prefetch next page before user reaches the end:
+
+```tsx
+function InfiniteList() {
+  const queryClient = useQueryClient()
+  const [page, setPage] = useState(0)
+
+  const handleScroll = (e) => {
+    const bottom = e.target.scrollHeight - e.target.scrollTop === e.target.clientHeight
+    
+    if (bottom) {
+      // Prefetch next page
+      queryClient.prefetchQuery({
+        queryKey: ['items', page + 1],
+        queryFn: () => fetchItems(page + 1)
+      })
+    }
+  }
+
+  return (
+    <div onScroll={handleScroll}>
+      {/* List items */}
+    </div>
+  )
+}
+```
+
+## Best Practices
+
+<Tip>
+1. **Prefetch on hover/focus**: Most effective for navigation
+2. **Set appropriate staleTime**: Avoid redundant prefetches
+3. **Don't over-prefetch**: Balance UX with data usage
+4. **Use with route loaders**: Great for SPA navigation
+5. **Combine with Suspense**: For React 18+ streaming SSR
+</Tip>
+
+## See Also
+
+- [Initial Data](/guides/initial-query-data) - For setting data before fetching
+- [SSR & Hydration](/guides/ssr) - For server-side prefetching
+- [Query Keys](/guides/query-keys) - For structuring cache keys

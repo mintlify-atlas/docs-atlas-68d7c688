@@ -1,0 +1,383 @@
+---
+title: useMutation
+description: API reference for the useMutation hook
+---
+
+The `useMutation` hook is used to create, update, or delete data. Unlike queries, mutations are typically used to perform side effects on the server.
+
+## Import
+
+```typescript
+import { useMutation } from '@tanstack/react-query'
+```
+
+## Signature
+
+```typescript
+function useMutation<
+  TData = unknown,
+  TError = DefaultError,
+  TVariables = void,
+  TOnMutateResult = unknown,
+>(
+  options: UseMutationOptions<TData, TError, TVariables, TOnMutateResult>,
+  queryClient?: QueryClient,
+): UseMutationResult<TData, TError, TVariables, TOnMutateResult>
+```
+
+## Parameters
+
+<ParamField path="options" type="object" required>
+  The mutation options object.
+
+  <Expandable title="properties">
+    <ParamField path="mutationFn" type="(variables: TVariables, context: MutationFunctionContext) => Promise<TData>" required>
+      The function that performs the mutation. Must return a promise.
+      
+      The `context` parameter contains:
+      - `client: QueryClient` - The QueryClient instance
+      - `meta: MutationMeta | undefined` - Optional mutation metadata
+      - `mutationKey?: MutationKey` - The mutation key if provided
+      
+      ```typescript
+      mutationFn: async (newTodo) => {
+        const response = await fetch('/api/todos', {
+          method: 'POST',
+          body: JSON.stringify(newTodo),
+        })
+        return response.json()
+      }
+      ```
+    </ParamField>
+
+    <ParamField path="mutationKey" type="MutationKey">
+      Optional key for the mutation. Useful for identifying mutations in devtools and for mutation caching.
+      
+      ```typescript
+      mutationKey: ['createTodo']
+      ```
+    </ParamField>
+
+    <ParamField path="onMutate" type="(variables: TVariables, context: MutationFunctionContext) => Promise<TOnMutateResult> | TOnMutateResult">
+      Function that will fire before the mutation function is fired. Useful for optimistic updates.
+      
+      ```typescript
+      onMutate: async (newTodo) => {
+        await queryClient.cancelQueries({ queryKey: ['todos'] })
+        const previousTodos = queryClient.getQueryData(['todos'])
+        queryClient.setQueryData(['todos'], old => [...old, newTodo])
+        return { previousTodos }
+      }
+      ```
+    </ParamField>
+
+    <ParamField path="onSuccess" type="(data: TData, variables: TVariables, onMutateResult: TOnMutateResult, context: MutationFunctionContext) => Promise<unknown> | unknown">
+      Function that will fire when the mutation is successful.
+      
+      ```typescript
+      onSuccess: (data, variables, onMutateResult) => {
+        queryClient.invalidateQueries({ queryKey: ['todos'] })
+      }
+      ```
+    </ParamField>
+
+    <ParamField path="onError" type="(error: TError, variables: TVariables, onMutateResult: TOnMutateResult | undefined, context: MutationFunctionContext) => Promise<unknown> | unknown">
+      Function that will fire if the mutation encounters an error.
+      
+      ```typescript
+      onError: (error, variables, onMutateResult) => {
+        if (onMutateResult?.previousTodos) {
+          queryClient.setQueryData(['todos'], onMutateResult.previousTodos)
+        }
+      }
+      ```
+    </ParamField>
+
+    <ParamField path="onSettled" type="(data: TData | undefined, error: TError | null, variables: TVariables, onMutateResult: TOnMutateResult | undefined, context: MutationFunctionContext) => Promise<unknown> | unknown">
+      Function that will fire when the mutation is either successfully fetched or encounters an error.
+      
+      ```typescript
+      onSettled: (data, error) => {
+        queryClient.invalidateQueries({ queryKey: ['todos'] })
+      }
+      ```
+    </ParamField>
+
+    <ParamField path="retry" type="boolean | number | ((failureCount: number, error: TError) => boolean)" default="0">
+      If `false`, failed mutations will not retry. If `true`, failed mutations will retry infinitely. If set to a number, failed mutations will retry until the failure count meets that number.
+      
+      ```typescript
+      retry: 3
+      retry: (failureCount, error) => failureCount < 3
+      ```
+    </ParamField>
+
+    <ParamField path="retryDelay" type="number | ((failureCount: number, error: TError) => number)">
+      Delay between retries in milliseconds.
+      
+      ```typescript
+      retryDelay: 1000
+      retryDelay: attemptIndex => Math.min(1000 * 2 ** attemptIndex, 30000)
+      ```
+    </ParamField>
+
+    <ParamField path="networkMode" type="'online' | 'always' | 'offlineFirst'" default="'online'">
+      - `'online'` - Mutations will not fire unless there is a network connection
+      - `'always'` - Mutations will fire regardless of network connection status
+      - `'offlineFirst'` - Mutations will fire immediately, but if they fail, they will be paused and retried when connection is restored
+    </ParamField>
+
+    <ParamField path="gcTime" type="number" default="300000">
+      The time in milliseconds that unused/inactive cache data remains in memory.
+    </ParamField>
+
+    <ParamField path="throwOnError" type="boolean | ((error: TError) => boolean)" default="false">
+      Set to `true` to throw errors instead of setting the `error` property.
+      
+      ```typescript
+      throwOnError: true
+      throwOnError: (error) => error.status >= 500
+      ```
+    </ParamField>
+
+    <ParamField path="meta" type="Record<string, unknown>">
+      Optional metadata that can be used in other places.
+      
+      ```typescript
+      meta: { operationType: 'create' }
+      ```
+    </ParamField>
+
+    <ParamField path="scope" type="{ id: string }">
+      Mutations with the same scope id will run in serial.
+      
+      ```typescript
+      scope: { id: 'todo-mutations' }
+      ```
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="queryClient" type="QueryClient">
+  Override the default QueryClient.
+</ParamField>
+
+## Returns
+
+<ResponseField name="UseMutationResult<TData, TError, TVariables, TOnMutateResult>" type="object">
+  The mutation result object.
+
+  <Expandable title="properties">
+    <ResponseField name="mutate" type="(variables: TVariables, options?: MutateOptions) => void">
+      The mutation function you can call with variables to trigger the mutation.
+      
+      The `options` parameter can override the mutation callbacks:
+      - `onSuccess?: (data, variables, onMutateResult) => void`
+      - `onError?: (error, variables, onMutateResult) => void`
+      - `onSettled?: (data, error, variables, onMutateResult) => void`
+      
+      ```typescript
+      mutate({ title: 'New Todo' }, {
+        onSuccess: (data) => console.log('Created:', data),
+      })
+      ```
+    </ResponseField>
+
+    <ResponseField name="mutateAsync" type="(variables: TVariables, options?: MutateOptions) => Promise<TData>">
+      Similar to `mutate` but returns a promise which can be awaited.
+      
+      ```typescript
+      try {
+        const data = await mutateAsync({ title: 'New Todo' })
+        console.log('Created:', data)
+      } catch (error) {
+        console.error('Error:', error)
+      }
+      ```
+    </ResponseField>
+
+    <ResponseField name="data" type="TData | undefined">
+      The last successfully resolved data for the mutation.
+    </ResponseField>
+
+    <ResponseField name="error" type="TError | null">
+      The error object for the mutation, if an error was encountered. Defaults to `null`.
+    </ResponseField>
+
+    <ResponseField name="variables" type="TVariables | undefined">
+      The variables object passed to the `mutationFn`.
+    </ResponseField>
+
+    <ResponseField name="status" type="'idle' | 'pending' | 'error' | 'success'">
+      - `'idle'` - Initial status prior to the mutation function executing
+      - `'pending'` - The mutation is currently executing
+      - `'error'` - The last mutation attempt resulted in an error
+      - `'success'` - The last mutation attempt was successful
+    </ResponseField>
+
+    <ResponseField name="isPending" type="boolean">
+      `true` if the mutation is currently executing.
+    </ResponseField>
+
+    <ResponseField name="isIdle" type="boolean">
+      `true` if the mutation is in its initial state prior to executing.
+    </ResponseField>
+
+    <ResponseField name="isSuccess" type="boolean">
+      `true` if the last mutation attempt was successful.
+    </ResponseField>
+
+    <ResponseField name="isError" type="boolean">
+      `true` if the last mutation attempt resulted in an error.
+    </ResponseField>
+
+    <ResponseField name="reset" type="() => void">
+      Function to clean the mutation internal state (resets to initial state).
+      
+      ```typescript
+      reset()
+      ```
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Examples
+
+### Basic Usage
+
+```typescript
+import { useMutation } from '@tanstack/react-query'
+
+function CreateTodo() {
+  const mutation = useMutation({
+    mutationFn: async (newTodo: { title: string }) => {
+      const response = await fetch('/api/todos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newTodo),
+      })
+      if (!response.ok) throw new Error('Failed to create todo')
+      return response.json()
+    },
+  })
+
+  return (
+    <div>
+      {mutation.isPending && <div>Creating...</div>}
+      {mutation.isError && <div>Error: {mutation.error.message}</div>}
+      {mutation.isSuccess && <div>Todo created!</div>}
+
+      <button
+        onClick={() => {
+          mutation.mutate({ title: 'New Todo' })
+        }}
+      >
+        Create Todo
+      </button>
+    </div>
+  )
+}
+```
+
+### With Optimistic Updates
+
+```typescript
+interface Todo {
+  id: number
+  title: string
+}
+
+const mutation = useMutation({
+  mutationFn: (newTodo: Omit<Todo, 'id'>) => createTodo(newTodo),
+  onMutate: async (newTodo) => {
+    // Cancel outgoing refetches
+    await queryClient.cancelQueries({ queryKey: ['todos'] })
+
+    // Snapshot the previous value
+    const previousTodos = queryClient.getQueryData<Todo[]>(['todos'])
+
+    // Optimistically update to the new value
+    queryClient.setQueryData<Todo[]>(['todos'], (old) => [
+      ...old,
+      { ...newTodo, id: Date.now() },
+    ])
+
+    // Return context with the snapshot
+    return { previousTodos }
+  },
+  onError: (err, newTodo, context) => {
+    // Rollback to the previous value on error
+    queryClient.setQueryData(['todos'], context?.previousTodos)
+  },
+  onSettled: () => {
+    // Always refetch after error or success
+    queryClient.invalidateQueries({ queryKey: ['todos'] })
+  },
+})
+```
+
+### Using mutateAsync
+
+```typescript
+const mutation = useMutation({
+  mutationFn: createTodo,
+})
+
+const handleSubmit = async (event: FormEvent) => {
+  event.preventDefault()
+  try {
+    const data = await mutation.mutateAsync({ title: 'New Todo' })
+    console.log('Created todo:', data)
+    // Navigate or perform other actions
+  } catch (error) {
+    console.error('Failed to create todo:', error)
+  }
+}
+```
+
+### With Callbacks
+
+```typescript
+mutation.mutate(
+  { title: 'New Todo' },
+  {
+    onSuccess: (data) => {
+      console.log('Success:', data)
+    },
+    onError: (error) => {
+      console.error('Error:', error)
+    },
+    onSettled: () => {
+      console.log('Mutation finished')
+    },
+  }
+)
+```
+
+### Serial Mutations with Scope
+
+```typescript
+const mutation1 = useMutation({
+  mutationFn: createTodo,
+  scope: { id: 'todo-mutations' },
+})
+
+const mutation2 = useMutation({
+  mutationFn: updateTodo,
+  scope: { id: 'todo-mutations' }, // Same scope = runs serially
+})
+```
+
+## Notes
+
+<Note>
+  Unlike `useQuery`, mutations do not automatically execute. You must call `mutate` or `mutateAsync` to trigger them.
+</Note>
+
+<Note>
+  The `mutate` function does not return the mutation result. Use `mutateAsync` if you need to await the result.
+</Note>
+
+<Note>
+  Callbacks passed to `mutate` will override the callbacks defined in the hook options for that specific mutation call.
+</Note>

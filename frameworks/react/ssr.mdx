@@ -1,0 +1,705 @@
+---
+title: Server-Side Rendering
+description: Use TanStack Query with SSR in Next.js and other frameworks
+---
+
+# Server-Side Rendering
+
+TanStack Query supports server-side rendering (SSR) with proper hydration, enabling you to prefetch data on the server and seamlessly transition to the client.
+
+## Why SSR with React Query?
+
+- **Faster initial page load** - Data is fetched on the server and sent with HTML
+- **Better SEO** - Search engines can crawl pre-rendered content
+- **Improved perceived performance** - Users see content immediately
+- **Automatic cache hydration** - Server data seamlessly transfers to client
+
+<Note>
+  React Query is designed to work seamlessly with SSR frameworks like Next.js, Remix, and others.
+</Note>
+
+## Next.js App Router (Recommended)
+
+The App Router (Next.js 13+) is the recommended approach for new applications.
+
+### Setup
+
+<Steps>
+  <Step title="Create a client component provider">
+    ```tsx app/providers.tsx
+    'use client'
+
+    import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+    import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
+    import { useState } from 'react'
+
+    export function Providers({ children }: { children: React.ReactNode }) {
+      const [queryClient] = useState(
+        () =>
+          new QueryClient({
+            defaultOptions: {
+              queries: {
+                staleTime: 60 * 1000,
+              },
+            },
+          }),
+      )
+
+      return (
+        <QueryClientProvider client={queryClient}>
+          {children}
+          <ReactQueryDevtools initialIsOpen={false} />
+        </QueryClientProvider>
+      )
+    }
+    ```
+
+    <Warning>
+      Always create the QueryClient inside the component using `useState` to ensure each request gets its own cache.
+    </Warning>
+  </Step>
+
+  <Step title="Add provider to root layout">
+    ```tsx app/layout.tsx
+    import { Providers } from './providers'
+
+    export default function RootLayout({
+      children,
+    }: {
+      children: React.ReactNode
+    }) {
+      return (
+        <html lang="en">
+          <body>
+            <Providers>{children}</Providers>
+          </body>
+        </html>
+      )
+    }
+    ```
+  </Step>
+
+  <Step title="Prefetch in Server Components">
+    ```tsx app/posts/page.tsx
+    import { QueryClient, dehydrate, HydrationBoundary } from '@tanstack/react-query'
+    import { PostsList } from './posts-list'
+
+    async function getPosts() {
+      const response = await fetch('https://api.example.com/posts')
+      return response.json()
+    }
+
+    export default async function PostsPage() {
+      const queryClient = new QueryClient()
+
+      await queryClient.prefetchQuery({
+        queryKey: ['posts'],
+        queryFn: getPosts,
+      })
+
+      return (
+        <HydrationBoundary state={dehydrate(queryClient)}>
+          <PostsList />
+        </HydrationBoundary>
+      )
+    }
+    ```
+  </Step>
+
+  <Step title="Use in Client Components">
+    ```tsx app/posts/posts-list.tsx
+    'use client'
+
+    import { useQuery } from '@tanstack/react-query'
+
+    async function getPosts() {
+      const response = await fetch('https://api.example.com/posts')
+      return response.json()
+    }
+
+    export function PostsList() {
+      const { data } = useQuery({
+        queryKey: ['posts'],
+        queryFn: getPosts,
+      })
+
+      return (
+        <ul>
+          {data?.map((post: any) => (
+            <li key={post.id}>{post.title}</li>
+          ))}
+        </ul>
+      )
+    }
+    ```
+  </Step>
+</Steps>
+
+### HydrationBoundary
+
+The `HydrationBoundary` component enables you to hydrate query data from the server:
+
+```tsx
+import { HydrationBoundary, QueryClient, dehydrate } from '@tanstack/react-query'
+
+export default async function Page() {
+  const queryClient = new QueryClient()
+
+  // Prefetch multiple queries
+  await Promise.all([
+    queryClient.prefetchQuery({
+      queryKey: ['posts'],
+      queryFn: fetchPosts,
+    }),
+    queryClient.prefetchQuery({
+      queryKey: ['user'],
+      queryFn: fetchUser,
+    }),
+  ])
+
+  return (
+    <HydrationBoundary state={dehydrate(queryClient)}>
+      <Posts />
+      <UserProfile />
+    </HydrationBoundary>
+  )
+}
+```
+
+<Tip>
+  `HydrationBoundary` only hydrates queries that don't already exist in the client cache, making it safe to use at multiple levels.
+</Tip>
+
+## Next.js Pages Router
+
+For the Pages Router (Next.js 12 and below), use `getServerSideProps` or `getStaticProps`.
+
+### getServerSideProps
+
+Prefetch data on every request:
+
+```tsx pages/posts.tsx
+import {
+  QueryClient,
+  QueryClientProvider,
+  dehydrate,
+  useQuery,
+} from '@tanstack/react-query'
+import type { GetServerSideProps } from 'next'
+
+interface Post {
+  id: number
+  title: string
+}
+
+async function fetchPosts(): Promise<Post[]> {
+  const response = await fetch('https://api.example.com/posts')
+  return response.json()
+}
+
+function Posts() {
+  const { data } = useQuery({
+    queryKey: ['posts'],
+    queryFn: fetchPosts,
+  })
+
+  return (
+    <ul>
+      {data?.map((post) => (
+        <li key={post.id}>{post.title}</li>
+      ))}
+    </ul>
+  )
+}
+
+export const getServerSideProps: GetServerSideProps = async () => {
+  const queryClient = new QueryClient()
+
+  await queryClient.prefetchQuery({
+    queryKey: ['posts'],
+    queryFn: fetchPosts,
+  })
+
+  return {
+    props: {
+      dehydratedState: dehydrate(queryClient),
+    },
+  }
+}
+
+export default Posts
+```
+
+Then in `_app.tsx`:
+
+```tsx pages/_app.tsx
+import { QueryClient, QueryClientProvider, Hydrate } from '@tanstack/react-query'
+import { useState } from 'react'
+import type { AppProps } from 'next/app'
+
+export default function App({ Component, pageProps }: AppProps) {
+  const [queryClient] = useState(() => new QueryClient())
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <Hydrate state={pageProps.dehydratedState}>
+        <Component {...pageProps} />
+      </Hydrate>
+    </QueryClientProvider>
+  )
+}
+```
+
+<Note>
+  In the Pages Router, use the `Hydrate` component (deprecated but still supported). In the App Router, use `HydrationBoundary` instead.
+</Note>
+
+### getStaticProps
+
+Prefetch data at build time for static generation:
+
+```tsx pages/posts/[id].tsx
+import { QueryClient, dehydrate, useQuery } from '@tanstack/react-query'
+import type { GetStaticProps, GetStaticPaths } from 'next'
+
+function PostDetails({ id }: { id: string }) {
+  const { data } = useQuery({
+    queryKey: ['post', id],
+    queryFn: () => fetchPost(id),
+  })
+
+  return (
+    <article>
+      <h1>{data?.title}</h1>
+      <p>{data?.body}</p>
+    </article>
+  )
+}
+
+export const getStaticPaths: GetStaticPaths = async () => {
+  const posts = await fetchPosts()
+  const paths = posts.map((post) => ({
+    params: { id: post.id.toString() },
+  }))
+
+  return {
+    paths,
+    fallback: 'blocking',
+  }
+}
+
+export const getStaticProps: GetStaticProps = async ({ params }) => {
+  const queryClient = new QueryClient()
+
+  await queryClient.prefetchQuery({
+    queryKey: ['post', params?.id],
+    queryFn: () => fetchPost(params?.id as string),
+  })
+
+  return {
+    props: {
+      dehydratedState: dehydrate(queryClient),
+    },
+    revalidate: 60, // Revalidate every 60 seconds
+  }
+}
+
+export default PostDetails
+```
+
+## Advanced Patterns
+
+### Streaming with Suspense
+
+Use React Suspense for progressive rendering:
+
+```tsx app/posts/page.tsx
+import { Suspense } from 'react'
+import { QueryClient, HydrationBoundary, dehydrate } from '@tanstack/react-query'
+import { PostsList } from './posts-list'
+import { Sidebar } from './sidebar'
+
+export default async function PostsPage() {
+  const queryClient = new QueryClient()
+
+  // Only prefetch critical data
+  await queryClient.prefetchQuery({
+    queryKey: ['posts'],
+    queryFn: fetchPosts,
+  })
+
+  return (
+    <HydrationBoundary state={dehydrate(queryClient)}>
+      <PostsList />
+      <Suspense fallback={<div>Loading sidebar...</div>}>
+        <Sidebar />
+      </Suspense>
+    </HydrationBoundary>
+  )
+}
+```
+
+```tsx app/posts/sidebar.tsx
+'use client'
+
+import { useSuspenseQuery } from '@tanstack/react-query'
+
+export function Sidebar() {
+  // This will suspend until data is loaded
+  const { data } = useSuspenseQuery({
+    queryKey: ['sidebar'],
+    queryFn: fetchSidebar,
+  })
+
+  return <aside>{data.content}</aside>
+}
+```
+
+<Tip>
+  Prefetch critical above-the-fold content on the server, and let less important content stream in using Suspense.
+</Tip>
+
+### Error Handling
+
+Handle errors during SSR:
+
+```tsx app/posts/page.tsx
+import { QueryClient, HydrationBoundary, dehydrate } from '@tanstack/react-query'
+
+export default async function PostsPage() {
+  const queryClient = new QueryClient()
+
+  try {
+    await queryClient.prefetchQuery({
+      queryKey: ['posts'],
+      queryFn: async () => {
+        const response = await fetch('https://api.example.com/posts')
+        if (!response.ok) {
+          throw new Error('Failed to fetch posts')
+        }
+        return response.json()
+      },
+    })
+  } catch (error) {
+    console.error('Failed to prefetch:', error)
+    // Optionally set error state in the cache
+  }
+
+  return (
+    <HydrationBoundary state={dehydrate(queryClient)}>
+      <PostsList />
+    </HydrationBoundary>
+  )
+}
+```
+
+### Initial Data from Props
+
+Pass server data as initial data:
+
+```tsx
+import { useQuery } from '@tanstack/react-query'
+
+function Posts({ initialPosts }: { initialPosts: Post[] }) {
+  const { data } = useQuery({
+    queryKey: ['posts'],
+    queryFn: fetchPosts,
+    initialData: initialPosts,
+  })
+
+  return <ul>{data.map(post => <li key={post.id}>{post.title}</li>)}</ul>
+}
+
+export async function getServerSideProps() {
+  const posts = await fetchPosts()
+  
+  return {
+    props: {
+      initialPosts: posts,
+    },
+  }
+}
+```
+
+<Warning>
+  Using `initialData` doesn't provide the same benefits as proper hydration. Prefer using `dehydrate` and `HydrationBoundary` for better cache management.
+</Warning>
+
+## Server-Only Code
+
+Ensure server-only code doesn't leak to the client:
+
+```tsx lib/queries.ts
+import 'server-only'
+import { prisma } from './prisma'
+
+export async function getPostsFromDatabase() {
+  return await prisma.post.findMany()
+}
+```
+
+```tsx app/posts/page.tsx
+import { QueryClient, HydrationBoundary, dehydrate } from '@tanstack/react-query'
+import { getPostsFromDatabase } from '@/lib/queries'
+
+export default async function PostsPage() {
+  const queryClient = new QueryClient()
+
+  await queryClient.prefetchQuery({
+    queryKey: ['posts'],
+    queryFn: getPostsFromDatabase,
+  })
+
+  return (
+    <HydrationBoundary state={dehydrate(queryClient)}>
+      <PostsList />
+    </HydrationBoundary>
+  )
+}
+```
+
+Install the `server-only` package:
+
+```bash
+npm install server-only
+```
+
+## Dehydration Options
+
+Control which queries to include in dehydrated state:
+
+```tsx
+import { dehydrate } from '@tanstack/react-query'
+
+const dehydratedState = dehydrate(queryClient, {
+  shouldDehydrateQuery: (query) => {
+    // Only dehydrate successful queries
+    return query.state.status === 'success'
+  },
+})
+```
+
+### Available Options
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `shouldDehydrateQuery` | `(query) => boolean` | Function to determine which queries to include |
+| `shouldDehydrateMutation` | `(mutation) => boolean` | Function to determine which mutations to include |
+
+## Performance Optimization
+
+### Prefetch Only What's Needed
+
+```tsx
+import { QueryClient, HydrationBoundary, dehydrate } from '@tanstack/react-query'
+
+export default async function Page() {
+  const queryClient = new QueryClient()
+
+  // Prefetch only above-the-fold data
+  await queryClient.prefetchQuery({
+    queryKey: ['critical-data'],
+    queryFn: fetchCriticalData,
+  })
+
+  // Let client fetch non-critical data
+  return (
+    <HydrationBoundary state={dehydrate(queryClient)}>
+      <CriticalContent />
+      <NonCriticalContent /> {/* Will fetch on client */}
+    </HydrationBoundary>
+  )
+}
+```
+
+### Stale While Revalidate
+
+```tsx
+import { QueryClient } from '@tanstack/react-query'
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 60 * 1000, // Consider data fresh for 1 minute
+      refetchOnMount: false, // Don't refetch on mount if data is fresh
+    },
+  },
+})
+```
+
+### Parallel Prefetching
+
+```tsx
+export default async function Page() {
+  const queryClient = new QueryClient()
+
+  // Prefetch in parallel for better performance
+  await Promise.all([
+    queryClient.prefetchQuery({ queryKey: ['posts'], queryFn: fetchPosts }),
+    queryClient.prefetchQuery({ queryKey: ['user'], queryFn: fetchUser }),
+    queryClient.prefetchQuery({ queryKey: ['settings'], queryFn: fetchSettings }),
+  ])
+
+  return (
+    <HydrationBoundary state={dehydrate(queryClient)}>
+      <Content />
+    </HydrationBoundary>
+  )
+}
+```
+
+## Remix Integration
+
+Use React Query with Remix:
+
+```tsx app/routes/posts.tsx
+import { json } from '@remix-run/node'
+import { useLoaderData } from '@remix-run/react'
+import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query'
+import type { LoaderFunction } from '@remix-run/node'
+
+export const loader: LoaderFunction = async () => {
+  const posts = await fetchPosts()
+  return json({ posts })
+}
+
+function Posts() {
+  const { posts } = useLoaderData<typeof loader>()
+  
+  const { data } = useQuery({
+    queryKey: ['posts'],
+    queryFn: fetchPosts,
+    initialData: posts,
+  })
+
+  return <ul>{data.map(post => <li key={post.id}>{post.title}</li>)}</ul>
+}
+
+export default function PostsRoute() {
+  const queryClient = new QueryClient()
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <Posts />
+    </QueryClientProvider>
+  )
+}
+```
+
+## Debugging SSR
+
+### Check Hydration Mismatches
+
+```tsx
+'use client'
+
+import { useEffect, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+
+export function Posts() {
+  const [mounted, setMounted] = useState(false)
+  const { data } = useQuery({
+    queryKey: ['posts'],
+    queryFn: fetchPosts,
+  })
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  if (!mounted) {
+    return <div>Loading...</div>
+  }
+
+  return <ul>{data?.map(post => <li key={post.id}>{post.title}</li>)}</ul>
+}
+```
+
+### Log Dehydrated State
+
+```tsx
+import { dehydrate, QueryClient } from '@tanstack/react-query'
+
+export default async function Page() {
+  const queryClient = new QueryClient()
+
+  await queryClient.prefetchQuery({
+    queryKey: ['posts'],
+    queryFn: fetchPosts,
+  })
+
+  const dehydratedState = dehydrate(queryClient)
+  console.log('Dehydrated queries:', dehydratedState.queries)
+
+  return <HydrationBoundary state={dehydratedState}>...</HydrationBoundary>
+}
+```
+
+## Common Pitfalls
+
+<Steps>
+  <Step title="Sharing QueryClient Between Requests">
+    **Wrong:**
+    ```tsx
+    const queryClient = new QueryClient() // Created outside component
+
+    export function Providers({ children }) {
+      return (
+        <QueryClientProvider client={queryClient}>
+          {children}
+        </QueryClientProvider>
+      )
+    }
+    ```
+
+    **Correct:**
+    ```tsx
+    export function Providers({ children }) {
+      const [queryClient] = useState(() => new QueryClient())
+      
+      return (
+        <QueryClientProvider client={queryClient}>
+          {children}
+        </QueryClientProvider>
+      )
+    }
+    ```
+  </Step>
+
+  <Step title="Query Key Mismatch">
+    Ensure query keys match between server and client:
+    ```tsx
+    // Server
+    await queryClient.prefetchQuery({
+      queryKey: ['posts'], // Must match client
+      queryFn: fetchPosts,
+    })
+
+    // Client
+    useQuery({
+      queryKey: ['posts'], // Must match server
+      queryFn: fetchPosts,
+    })
+    ```
+  </Step>
+
+  <Step title="Not Using HydrationBoundary">
+    Always wrap client components with `HydrationBoundary`:
+    ```tsx
+    <HydrationBoundary state={dehydrate(queryClient)}>
+      <ClientComponent />
+    </HydrationBoundary>
+    ```
+  </Step>
+</Steps>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="TypeScript" icon="code" href="/frameworks/react/typescript">
+    Add type safety to SSR queries
+  </Card>
+  <Card title="DevTools" icon="wrench" href="/frameworks/react/devtools">
+    Debug hydration with React Query DevTools
+  </Card>
+</CardGroup>

@@ -1,0 +1,593 @@
+---
+title: TypeScript
+description: Type-safe queries and mutations with Vue Query and TypeScript
+---
+
+# TypeScript
+
+Vue Query is written in TypeScript and provides comprehensive type safety with excellent inference. This guide covers TypeScript patterns and best practices.
+
+## Type Inference
+
+Vue Query automatically infers types from your query and mutation functions:
+
+```typescript
+import { useQuery } from '@tanstack/vue-query'
+
+interface User {
+  id: number
+  name: string
+  email: string
+}
+
+// Type is automatically inferred as Ref<User | undefined>
+const { data } = useQuery({
+  queryKey: ['user', 1],
+  queryFn: async (): Promise<User> => {
+    const response = await fetch('/api/user/1')
+    return response.json()
+  },
+})
+
+// data.value is typed as User | undefined
+console.log(data.value?.name)
+```
+
+<Tip>
+Always specify return types for your query functions. This ensures type safety throughout your application and provides better error messages.
+</Tip>
+
+## Generic Type Parameters
+
+`useQuery` accepts four generic type parameters for explicit typing:
+
+```typescript
+useQuery<TQueryFnData, TError, TData, TQueryKey>()
+```
+
+- **TQueryFnData**: The type returned by the query function
+- **TError**: The type of errors (defaults to `DefaultError`)
+- **TData**: The type of the final `data` (after select transforms)
+- **TQueryKey**: The type of the query key
+
+### Example: Full Generic Specification
+
+```typescript
+import { useQuery } from '@tanstack/vue-query'
+import type { DefaultError } from '@tanstack/vue-query'
+
+interface User {
+  id: number
+  name: string
+  email: string
+}
+
+interface UserError {
+  code: string
+  message: string
+}
+
+const { data, error } = useQuery<
+  User,              // TQueryFnData
+  UserError,         // TError
+  string,            // TData (transformed)
+  ['user', number]   // TQueryKey
+>({
+  queryKey: ['user', 1],
+  queryFn: async (): Promise<User> => {
+    const response = await fetch('/api/user/1')
+    if (!response.ok) {
+      throw await response.json() as UserError
+    }
+    return response.json()
+  },
+  select: (user) => user.name, // Transform User to string
+})
+
+// data is Ref<string | undefined>
+// error is Ref<UserError | null>
+```
+
+## Query Key Types
+
+Query keys can be strongly typed for type safety:
+
+```typescript
+import { useQuery } from '@tanstack/vue-query'
+
+type TodoQueryKey = ['todos'] | ['todos', number] | ['todos', 'filter', string]
+
+const { data } = useQuery<Todo[], DefaultError, Todo[], TodoQueryKey>({
+  queryKey: ['todos', 1],
+  queryFn: ({ queryKey }) => {
+    const [, id] = queryKey // id is typed as number
+    return fetchTodo(id)
+  },
+})
+```
+
+### Extract Query Key Type
+
+Use the `queryKey` property for type inference:
+
+```typescript
+const queryOptions = {
+  queryKey: ['user', 1] as const,
+  queryFn: fetchUser,
+}
+
+type QueryKey = typeof queryOptions.queryKey // ['user', 1]
+```
+
+## Query Options Type Safety
+
+Use `queryOptions` helper for perfect type inference:
+
+```typescript queries.ts
+import { queryOptions } from '@tanstack/vue-query'
+
+interface User {
+  id: number
+  name: string
+}
+
+export const userQueryOptions = (userId: number) => queryOptions({
+  queryKey: ['user', userId],
+  queryFn: async (): Promise<User> => {
+    const response = await fetch(`/api/users/${userId}`)
+    return response.json()
+  },
+  staleTime: 5000,
+})
+
+// Use with full type inference
+const { data } = useQuery(userQueryOptions(1))
+// data is Ref<User | undefined>
+```
+
+<Note>
+The `queryOptions` helper provides type safety across `useQuery`, `queryClient.fetchQuery`, and `queryClient.prefetchQuery` without repeating type annotations.
+</Note>
+
+## Defined Initial Data
+
+When providing `initialData`, the result type changes:
+
+```typescript
+import type { UseQueryDefinedReturnType } from '@tanstack/vue-query'
+
+interface User {
+  id: number
+  name: string
+}
+
+// Without initialData: data is Ref<User | undefined>
+const query1 = useQuery({
+  queryKey: ['user'],
+  queryFn: fetchUser,
+})
+// query1.data.value can be undefined
+
+// With initialData: data is Ref<User>
+const query2: UseQueryDefinedReturnType<User, Error> = useQuery({
+  queryKey: ['user'],
+  queryFn: fetchUser,
+  initialData: { id: 0, name: 'Loading...' },
+})
+// query2.data.value is always defined
+```
+
+## Mutation Types
+
+`useMutation` accepts four generic type parameters:
+
+```typescript
+useMutation<TData, TError, TVariables, TContext>()
+```
+
+- **TData**: The type returned by the mutation function
+- **TError**: The type of errors
+- **TVariables**: The type of variables passed to `mutate`
+- **TContext**: The type of context used in optimistic updates
+
+### Typed Mutations
+
+```typescript
+import { useMutation, useQueryClient } from '@tanstack/vue-query'
+
+interface Todo {
+  id: number
+  title: string
+}
+
+interface CreateTodoVariables {
+  title: string
+}
+
+interface TodoError {
+  code: string
+  message: string
+}
+
+interface TodoContext {
+  previousTodos: Todo[]
+}
+
+const queryClient = useQueryClient()
+
+const { mutate, mutateAsync, isPending } = useMutation<
+  Todo,                   // TData - returned from mutation
+  TodoError,              // TError
+  CreateTodoVariables,    // TVariables
+  TodoContext             // TContext
+>({
+  mutationFn: async (variables) => {
+    // variables is typed as CreateTodoVariables
+    const response = await fetch('/api/todos', {
+      method: 'POST',
+      body: JSON.stringify(variables),
+    })
+    return response.json()
+  },
+  onMutate: async (variables) => {
+    // variables is CreateTodoVariables
+    await queryClient.cancelQueries({ queryKey: ['todos'] })
+    const previousTodos = queryClient.getQueryData<Todo[]>(['todos'])
+    
+    // Return context
+    return { previousTodos: previousTodos ?? [] }
+  },
+  onError: (error, variables, context) => {
+    // error is TodoError
+    // variables is CreateTodoVariables
+    // context is TodoContext | undefined
+    if (context?.previousTodos) {
+      queryClient.setQueryData(['todos'], context.previousTodos)
+    }
+  },
+  onSuccess: (data, variables, context) => {
+    // data is Todo
+    // variables is CreateTodoVariables
+    // context is TodoContext | undefined
+  },
+})
+
+// mutate accepts CreateTodoVariables
+mutate({ title: 'New Todo' })
+
+// mutateAsync returns Promise<Todo>
+const newTodo = await mutateAsync({ title: 'New Todo' })
+```
+
+## Infinite Query Types
+
+`useInfiniteQuery` requires specific generic types:
+
+```typescript
+import { useInfiniteQuery } from '@tanstack/vue-query'
+import type { InfiniteData } from '@tanstack/vue-query'
+
+interface Project {
+  id: number
+  name: string
+}
+
+interface ProjectsPage {
+  projects: Project[]
+  nextCursor: number | null
+}
+
+const { data, fetchNextPage, hasNextPage } = useInfiniteQuery<
+  ProjectsPage,           // TQueryFnData (page type)
+  Error,                  // TError
+  InfiniteData<ProjectsPage>,  // TData (full structure)
+  ['projects'],           // TQueryKey
+  number                  // TPageParam
+>({
+  queryKey: ['projects'],
+  queryFn: async ({ pageParam = 0 }) => {
+    // pageParam is typed as number
+    const response = await fetch(`/api/projects?cursor=${pageParam}`)
+    return response.json()
+  },
+  initialPageParam: 0,
+  getNextPageParam: (lastPage) => {
+    // lastPage is ProjectsPage
+    return lastPage.nextCursor
+  },
+  getPreviousPageParam: (firstPage) => {
+    // firstPage is ProjectsPage
+    return firstPage.nextCursor
+  },
+})
+
+// data.value has type InfiniteData<ProjectsPage> | undefined
+data.value?.pages.forEach(page => {
+  page.projects // Project[]
+})
+```
+
+## Infinite Query Options Helper
+
+Use `infiniteQueryOptions` for type-safe infinite queries:
+
+```typescript
+import { infiniteQueryOptions, useInfiniteQuery } from '@tanstack/vue-query'
+
+interface ProjectsPage {
+  projects: Array<{ id: number; name: string }>
+  nextCursor: number | null
+}
+
+export const projectsInfiniteOptions = infiniteQueryOptions({
+  queryKey: ['projects', 'infinite'],
+  queryFn: async ({ pageParam }): Promise<ProjectsPage> => {
+    const response = await fetch(`/api/projects?cursor=${pageParam}`)
+    return response.json()
+  },
+  initialPageParam: 0,
+  getNextPageParam: (lastPage) => lastPage.nextCursor,
+})
+
+// Perfect type inference
+const query = useInfiniteQuery(projectsInfiniteOptions)
+```
+
+## Query Client Types
+
+Type the QueryClient for custom configurations:
+
+```typescript
+import { QueryClient } from '@tanstack/vue-query'
+import type { DefaultError, QueryClientConfig } from '@tanstack/vue-query'
+
+interface AppError {
+  message: string
+  code: string
+}
+
+const config: QueryClientConfig = {
+  defaultOptions: {
+    queries: {
+      retry: 3,
+      staleTime: 5000,
+    },
+    mutations: {
+      onError: (error: DefaultError) => {
+        console.error('Mutation error:', error)
+      },
+    },
+  },
+}
+
+const queryClient = new QueryClient(config)
+```
+
+## Type-Safe Query Filters
+
+Use filters with proper typing:
+
+```typescript
+import { useQueryClient } from '@tanstack/vue-query'
+import type { QueryFilters } from '@tanstack/vue-query'
+
+const queryClient = useQueryClient()
+
+// Type-safe filters
+const filters: QueryFilters = {
+  queryKey: ['todos'],
+  exact: false,
+  type: 'active',
+  stale: true,
+}
+
+queryClient.invalidateQueries(filters)
+
+// With predicate
+queryClient.invalidateQueries({
+  predicate: (query) => {
+    // query.queryKey is typed
+    return query.queryKey[0] === 'todos'
+  },
+})
+```
+
+## Reactive Type Utilities
+
+Vue Query provides type utilities for Vue reactivity:
+
+```typescript
+import type { 
+  MaybeRef, 
+  MaybeRefDeep,
+  MaybeRefOrGetter,
+  DeepUnwrapRef 
+} from '@tanstack/vue-query'
+import { ref, computed } from 'vue'
+
+// MaybeRef<T> - Can be T, Ref<T>, or ComputedRef<T>
+const userId: MaybeRef<number> = ref(1)
+const userName: MaybeRef<string> = 'John'
+const userAge: MaybeRef<number> = computed(() => 25)
+
+// MaybeRefOrGetter<T> - Can also be a getter function
+const value: MaybeRefOrGetter<number> = () => 42
+
+// MaybeRefDeep<T> - Deep version for nested objects
+interface User {
+  id: number
+  profile: {
+    name: string
+    settings: {
+      theme: string
+    }
+  }
+}
+
+const user: MaybeRefDeep<User> = {
+  id: ref(1),
+  profile: {
+    name: ref('John'),
+    settings: {
+      theme: ref('dark')
+    }
+  }
+}
+
+// DeepUnwrapRef<T> - Unwraps all refs
+type UnwrappedUser = DeepUnwrapRef<typeof user>
+// { id: number, profile: { name: string, settings: { theme: string } } }
+```
+
+## Shallow Refs
+
+Use `shallow` option for non-reactive data:
+
+```typescript
+import { useQuery } from '@tanstack/vue-query'
+import type { UseQueryReturnType } from '@tanstack/vue-query'
+
+interface LargeDataset {
+  items: Array<{ id: number; data: any[] }>
+}
+
+// Returns shallow refs for better performance
+const query: UseQueryReturnType<LargeDataset, Error> = useQuery({
+  queryKey: ['large-dataset'],
+  queryFn: fetchLargeDataset,
+  shallow: true, // Use shallowRef instead of ref
+})
+
+// data.value is not deeply reactive
+// Only data.value itself triggers updates, not nested properties
+```
+
+<Warning>
+With `shallow: true`, nested property changes won't trigger reactivity. Use this only for large datasets where deep reactivity isn't needed.
+</Warning>
+
+## Custom Error Types
+
+Define a custom error type for your application:
+
+```typescript
+import { QueryClient, useQuery } from '@tanstack/vue-query'
+
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    public statusCode: number,
+    public code: string,
+  ) {
+    super(message)
+    this.name = 'ApiError'
+  }
+}
+
+// Configure globally
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      onError: (error) => {
+        if (error instanceof ApiError) {
+          console.error(`API Error ${error.statusCode}: ${error.message}`)
+        }
+      },
+    },
+  },
+})
+
+// Use in queries
+const { error } = useQuery<User, ApiError>({
+  queryKey: ['user'],
+  queryFn: async () => {
+    const response = await fetch('/api/user')
+    if (!response.ok) {
+      throw new ApiError(
+        'Failed to fetch user',
+        response.status,
+        'USER_FETCH_ERROR'
+      )
+    }
+    return response.json()
+  },
+})
+
+// error.value is typed as ApiError | null
+if (error.value) {
+  console.log(error.value.statusCode)
+  console.log(error.value.code)
+}
+```
+
+## Type Guards
+
+Create type guards for safer data access:
+
+```typescript
+import { computed } from 'vue'
+import { useQuery } from '@tanstack/vue-query'
+
+interface User {
+  id: number
+  name: string
+  email: string
+}
+
+function isUser(value: unknown): value is User {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'id' in value &&
+    'name' in value &&
+    'email' in value
+  )
+}
+
+const { data } = useQuery({
+  queryKey: ['user'],
+  queryFn: fetchUser,
+})
+
+// Use type guard for safe access
+const userName = computed(() => {
+  return isUser(data.value) ? data.value.name : 'Unknown'
+})
+```
+
+## Strict Null Checks
+
+Vue Query works best with TypeScript's strict mode enabled:
+
+```json tsconfig.json
+{
+  "compilerOptions": {
+    "strict": true,
+    "strictNullChecks": true,
+    "noImplicitAny": true,
+    "noImplicitThis": true,
+    "alwaysStrict": true
+  }
+}
+```
+
+<Tip>
+Enable `strict` mode in TypeScript for the best type safety with Vue Query. This catches potential `undefined` access at compile time.
+</Tip>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="DevTools" icon="bug" href="/frameworks/vue/devtools">
+    Debug type-safe queries
+  </Card>
+  <Card title="API Reference" icon="book" href="/api/vue/useQuery">
+    Full API documentation
+  </Card>
+  <Card title="Examples" icon="flask" href="/examples/vue/typescript">
+    TypeScript examples
+  </Card>
+  <Card title="Quick Start" icon="rocket" href="/frameworks/vue/quick-start">
+    Basic usage guide
+  </Card>
+</CardGroup>

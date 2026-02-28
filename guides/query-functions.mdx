@@ -1,0 +1,532 @@
+---
+title: Query Functions
+description: Patterns and best practices for writing query functions in TanStack Query
+---
+
+Query functions are the functions that actually fetch your data. They can be any function that returns a promise.
+
+## Basic Query Function
+
+A query function must return a promise that resolves data or throws an error:
+
+```tsx
+import { useQuery } from '@tanstack/react-query'
+
+function useTodos() {
+  return useQuery({
+    queryKey: ['todos'],
+    queryFn: async () => {
+      const response = await fetch('https://api.example.com/todos')
+      if (!response.ok) {
+        throw new Error('Network response was not ok')
+      }
+      return response.json()
+    },
+  })
+}
+```
+
+<Note>
+Query functions must throw errors instead of returning them for proper error handling.
+</Note>
+
+## Query Function Context
+
+Query functions receive a context object with useful properties:
+
+```tsx
+type QueryFunctionContext = {
+  queryKey: QueryKey,      // The query key
+  signal: AbortSignal,     // AbortSignal for cancellation
+  meta: QueryMeta,         // Optional meta information
+  client: QueryClient,     // The QueryClient instance
+}
+```
+
+### Using the Context
+
+```tsx
+useQuery({
+  queryKey: ['todo', todoId],
+  queryFn: async ({ queryKey, signal }) => {
+    // Destructure queryKey
+    const [, id] = queryKey
+    
+    // Use signal for cancellation
+    const response = await fetch(`/api/todos/${id}`, { signal })
+    return response.json()
+  },
+})
+```
+
+## Query Function Patterns
+
+<Tabs>
+  <Tab title="Inline Function">
+    ```tsx
+    useQuery({
+      queryKey: ['todos'],
+      queryFn: async () => {
+        const res = await fetch('/api/todos')
+        return res.json()
+      },
+    })
+    ```
+  </Tab>
+  <Tab title="Separate Function">
+    ```tsx
+    async function fetchTodos() {
+      const res = await fetch('/api/todos')
+      return res.json()
+    }
+
+    useQuery({
+      queryKey: ['todos'],
+      queryFn: fetchTodos,
+    })
+    ```
+  </Tab>
+  <Tab title="With Parameters">
+    ```tsx
+    async function fetchTodo(id: number) {
+      const res = await fetch(`/api/todos/${id}`)
+      return res.json()
+    }
+
+    useQuery({
+      queryKey: ['todo', todoId],
+      queryFn: () => fetchTodo(todoId),
+    })
+    ```
+  </Tab>
+  <Tab title="From Query Key">
+    ```tsx
+    useQuery({
+      queryKey: ['todo', todoId],
+      queryFn: ({ queryKey }) => {
+        const [, id] = queryKey
+        return fetchTodo(id)
+      },
+    })
+    ```
+  </Tab>
+</Tabs>
+
+## Handling Errors
+
+Query functions should throw errors for failed requests:
+
+```tsx
+const fetchTodos = async () => {
+  const response = await fetch('/api/todos')
+  
+  if (!response.ok) {
+    // Throw an error to trigger error state
+    throw new Error(`HTTP error! status: ${response.status}`)
+  }
+  
+  return response.json()
+}
+
+function Todos() {
+  const { data, error, isError } = useQuery({
+    queryKey: ['todos'],
+    queryFn: fetchTodos,
+  })
+
+  if (isError) {
+    return <div>Error: {error.message}</div>
+  }
+}
+```
+
+<Warning>
+Do not return errors from query functions. Always throw them.
+</Warning>
+
+## Query Function with Axios
+
+```tsx
+import axios from 'axios'
+
+const fetchTodos = async () => {
+  // Axios automatically throws on non-2xx responses
+  const { data } = await axios.get('/api/todos')
+  return data
+}
+
+useQuery({
+  queryKey: ['todos'],
+  queryFn: fetchTodos,
+})
+```
+
+## Query Function with Fetch API
+
+Complete example with proper error handling:
+
+```tsx
+const fetchTodo = async (id: number): Promise<Todo> => {
+  const response = await fetch(`/api/todos/${id}`)
+  
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(error.message || 'Failed to fetch todo')
+  }
+  
+  return response.json()
+}
+
+function useTodo(id: number) {
+  return useQuery({
+    queryKey: ['todo', id],
+    queryFn: () => fetchTodo(id),
+  })
+}
+```
+
+## Cancellation with AbortSignal
+
+Use the signal for request cancellation:
+
+```tsx
+const fetchTodos = async ({ signal }: { signal: AbortSignal }) => {
+  const response = await fetch('/api/todos', { signal })
+  return response.json()
+}
+
+useQuery({
+  queryKey: ['todos'],
+  queryFn: fetchTodos,
+})
+```
+
+<Note>
+When a query is cancelled (e.g., component unmounts), the AbortSignal is automatically triggered.
+</Note>
+
+## Dependent Data in Query Functions
+
+Extract dependencies from the query key:
+
+```tsx
+function useUserProjects(userId: number) {
+  return useQuery({
+    queryKey: ['projects', userId],
+    queryFn: async ({ queryKey }) => {
+      const [, userId] = queryKey
+      const response = await fetch(`/api/users/${userId}/projects`)
+      return response.json()
+    },
+  })
+}
+```
+
+## Parallel Requests in Query Function
+
+Fetch multiple resources in a single query:
+
+```tsx
+const fetchDashboardData = async () => {
+  const [users, posts, comments] = await Promise.all([
+    fetch('/api/users').then(r => r.json()),
+    fetch('/api/posts').then(r => r.json()),
+    fetch('/api/comments').then(r => r.json()),
+  ])
+  
+  return { users, posts, comments }
+}
+
+useQuery({
+  queryKey: ['dashboard'],
+  queryFn: fetchDashboardData,
+})
+```
+
+## Default Query Function
+
+Set a default query function for all queries:
+
+```tsx
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      queryFn: async ({ queryKey, signal }) => {
+        const [url] = queryKey
+        const response = await fetch(`${url}`, { signal })
+        if (!response.ok) {
+          throw new Error('Network error')
+        }
+        return response.json()
+      },
+    },
+  },
+})
+
+// Now you can omit queryFn
+useQuery({ queryKey: ['/api/todos'] })
+```
+
+## TypeScript Query Functions
+
+Type-safe query functions:
+
+```tsx
+interface Todo {
+  id: number
+  title: string
+  completed: boolean
+}
+
+const fetchTodo = async (id: number): Promise<Todo> => {
+  const response = await fetch(`/api/todos/${id}`)
+  if (!response.ok) throw new Error('Failed to fetch')
+  return response.json()
+}
+
+function useTodo(id: number) {
+  return useQuery({
+    queryKey: ['todo', id],
+    queryFn: () => fetchTodo(id),
+  })
+}
+```
+
+## Query Functions with GraphQL
+
+```tsx
+import { request, gql } from 'graphql-request'
+
+const endpoint = 'https://api.example.com/graphql'
+
+const fetchTodos = async () => {
+  const query = gql`
+    query {
+      todos {
+        id
+        title
+        completed
+      }
+    }
+  `
+  
+  return request(endpoint, query)
+}
+
+useQuery({
+  queryKey: ['todos'],
+  queryFn: fetchTodos,
+})
+```
+
+## Query Functions with tRPC
+
+```tsx
+import { trpc } from './trpc'
+
+function useTodos() {
+  return useQuery({
+    queryKey: ['todos'],
+    queryFn: () => trpc.todos.list.query(),
+  })
+}
+```
+
+## Paginated Query Function
+
+```tsx
+interface TodosResponse {
+  todos: Todo[]
+  nextCursor?: number
+}
+
+const fetchTodos = async (page: number): Promise<TodosResponse> => {
+  const response = await fetch(`/api/todos?page=${page}`)
+  return response.json()
+}
+
+function useTodos(page: number) {
+  return useQuery({
+    queryKey: ['todos', page],
+    queryFn: () => fetchTodos(page),
+  })
+}
+```
+
+## Infinite Query Function
+
+```tsx
+const fetchProjects = async ({ pageParam = 0 }) => {
+  const response = await fetch(`/api/projects?cursor=${pageParam}`)
+  return response.json()
+}
+
+useInfiniteQuery({
+  queryKey: ['projects'],
+  queryFn: fetchProjects,
+  initialPageParam: 0,
+  getNextPageParam: (lastPage) => lastPage.nextCursor,
+  getPreviousPageParam: (firstPage) => firstPage.prevCursor,
+})
+```
+
+## Query Function Error Types
+
+Type errors properly:
+
+```tsx
+class ApiError extends Error {
+  constructor(
+    message: string,
+    public statusCode: number,
+    public data?: unknown
+  ) {
+    super(message)
+    this.name = 'ApiError'
+  }
+}
+
+const fetchTodo = async (id: number): Promise<Todo> => {
+  const response = await fetch(`/api/todos/${id}`)
+  
+  if (!response.ok) {
+    const errorData = await response.json()
+    throw new ApiError(
+      errorData.message,
+      response.status,
+      errorData
+    )
+  }
+  
+  return response.json()
+}
+
+function useTodo(id: number) {
+  return useQuery<Todo, ApiError>({
+    queryKey: ['todo', id],
+    queryFn: () => fetchTodo(id),
+  })
+}
+```
+
+## Retry Logic in Query Functions
+
+Query functions automatically retry based on query options:
+
+```tsx
+useQuery({
+  queryKey: ['todos'],
+  queryFn: fetchTodos,
+  retry: 3, // Retry 3 times before failing
+  retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
+})
+```
+
+<Note>
+The query function doesn't need to implement retry logic - TanStack Query handles it automatically.
+</Note>
+
+## Query Function with Authentication
+
+```tsx
+const fetchWithAuth = async (url: string, token: string) => {
+  const response = await fetch(url, {
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+  })
+  
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`)
+  }
+  
+  return response.json()
+}
+
+function useTodos(token: string) {
+  return useQuery({
+    queryKey: ['todos', token],
+    queryFn: () => fetchWithAuth('/api/todos', token),
+    enabled: !!token,
+  })
+}
+```
+
+## Transforming Data in Query Functions
+
+```tsx
+interface TodoDTO {
+  id: number
+  title: string
+  completed_at: string | null
+}
+
+interface Todo {
+  id: number
+  title: string
+  completed: boolean
+}
+
+const fetchTodos = async (): Promise<Todo[]> => {
+  const response = await fetch('/api/todos')
+  const dtos: TodoDTO[] = await response.json()
+  
+  // Transform DTOs to domain models
+  return dtos.map(dto => ({
+    id: dto.id,
+    title: dto.title,
+    completed: dto.completed_at !== null,
+  }))
+}
+
+useQuery({
+  queryKey: ['todos'],
+  queryFn: fetchTodos,
+})
+```
+
+<Tip>
+Transform data in the query function for consistent structure, or use the `select` option for view-specific transformations.
+</Tip>
+
+## Query Function Best Practices
+
+<Steps>
+  <Step title="Always Return Promises">
+    Query functions must return a promise.
+    ```tsx
+    // Good
+    queryFn: async () => { /* ... */ }
+    queryFn: () => fetch('/api/todos')
+    
+    // Bad
+    queryFn: () => data // Not a promise
+    ```
+  </Step>
+  <Step title="Throw Errors">
+    Throw errors instead of returning them.
+    ```tsx
+    // Good
+    if (!response.ok) throw new Error()
+    
+    // Bad
+    if (!response.ok) return { error: true }
+    ```
+  </Step>
+  <Step title="Use AbortSignal">
+    Support cancellation with the signal.
+    ```tsx
+    queryFn: ({ signal }) => fetch('/api/todos', { signal })
+    ```
+  </Step>
+  <Step title="Extract from Query Key">
+    Get parameters from the query key for consistency.
+    ```tsx
+    queryFn: ({ queryKey }) => {
+      const [, id] = queryKey
+      return fetchTodo(id)
+    }
+    ```
+  </Step>
+</Steps>

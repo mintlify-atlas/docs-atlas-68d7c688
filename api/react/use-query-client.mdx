@@ -1,0 +1,335 @@
+---
+title: useQueryClient
+description: API reference for the useQueryClient hook
+---
+
+The `useQueryClient` hook returns the current `QueryClient` instance from React context. This allows you to access the QueryClient methods for imperative operations like invalidating queries, setting query data, and more.
+
+## Import
+
+```typescript
+import { useQueryClient } from '@tanstack/react-query'
+```
+
+## Signature
+
+```typescript
+function useQueryClient(queryClient?: QueryClient): QueryClient
+```
+
+## Parameters
+
+<ParamField path="queryClient" type="QueryClient">
+  Optional QueryClient instance to use instead of the one from context. If provided, this instance will be returned instead of the context value.
+</ParamField>
+
+## Returns
+
+<ResponseField name="QueryClient" type="QueryClient">
+  The QueryClient instance with all available methods.
+</ResponseField>
+
+## QueryClient Methods
+
+The returned QueryClient provides many methods for interacting with the cache:
+
+### Query Methods
+
+- `fetchQuery` - Fetch a query and return the data
+- `prefetchQuery` - Prefetch a query without returning data
+- `fetchInfiniteQuery` - Fetch an infinite query
+- `prefetchInfiniteQuery` - Prefetch an infinite query
+- `getQueryData` - Get the cached data for a query
+- `setQueryData` - Manually set the cached data for a query
+- `getQueryState` - Get the state for a query
+- `invalidateQueries` - Invalidate queries to trigger refetches
+- `refetchQueries` - Refetch queries
+- `cancelQueries` - Cancel outgoing query requests
+- `removeQueries` - Remove queries from the cache
+- `resetQueries` - Reset queries to their initial state
+- `isFetching` - Check if any queries are fetching
+- `ensureQueryData` - Ensure query data exists, fetch if needed
+
+### Mutation Methods
+
+- `getMutationCache` - Get the mutation cache
+- `isMutating` - Check if any mutations are running
+
+### Cache Methods
+
+- `getQueryCache` - Get the query cache
+- `clear` - Clear all cache data
+- `getDefaultOptions` - Get the default options
+- `setDefaultOptions` - Set the default options
+- `getQueryDefaults` - Get default options for a query key
+- `setQueryDefaults` - Set default options for a query key
+- `getMutationDefaults` - Get default options for a mutation key
+- `setMutationDefaults` - Set default options for a mutation key
+
+### Lifecycle Methods
+
+- `mount` - Mount the QueryClient
+- `unmount` - Unmount the QueryClient
+
+## Examples
+
+### Basic Usage
+
+```typescript
+import { useQueryClient } from '@tanstack/react-query'
+
+function MyComponent() {
+  const queryClient = useQueryClient()
+
+  const handleClick = () => {
+    // Invalidate and refetch all queries
+    queryClient.invalidateQueries({ queryKey: ['todos'] })
+  }
+
+  return <button onClick={handleClick}>Refresh Todos</button>
+}
+```
+
+### Invalidating Queries
+
+```typescript
+function TodoActions() {
+  const queryClient = useQueryClient()
+
+  const invalidateTodos = () => {
+    // Invalidate all queries with a key starting with 'todos'
+    queryClient.invalidateQueries({ queryKey: ['todos'] })
+  }
+
+  const invalidateSpecificTodo = (id: number) => {
+    // Invalidate a specific todo
+    queryClient.invalidateQueries({ queryKey: ['todo', id] })
+  }
+
+  return (
+    <div>
+      <button onClick={invalidateTodos}>Invalidate All Todos</button>
+      <button onClick={() => invalidateSpecificTodo(1)}>Invalidate Todo 1</button>
+    </div>
+  )
+}
+```
+
+### Manually Setting Query Data
+
+```typescript
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+
+function CreateTodo() {
+  const queryClient = useQueryClient()
+
+  const mutation = useMutation({
+    mutationFn: createTodo,
+    onSuccess: (newTodo) => {
+      // Update the todos list with the new todo
+      queryClient.setQueryData(['todos'], (old: Todo[] = []) => [
+        ...old,
+        newTodo,
+      ])
+    },
+  })
+
+  return (
+    <button onClick={() => mutation.mutate({ title: 'New Todo' })}>
+      Create Todo
+    </button>
+  )
+}
+```
+
+### Getting Query Data
+
+```typescript
+function TodoCount() {
+  const queryClient = useQueryClient()
+
+  const handleClick = () => {
+    // Get current cached data
+    const todos = queryClient.getQueryData<Todo[]>(['todos'])
+    console.log('Number of todos:', todos?.length ?? 0)
+  }
+
+  return <button onClick={handleClick}>Log Todo Count</button>
+}
+```
+
+### Prefetching Queries
+
+```typescript
+function TodoList() {
+  const queryClient = useQueryClient()
+
+  const handleMouseEnter = (todoId: number) => {
+    // Prefetch the todo details on hover
+    queryClient.prefetchQuery({
+      queryKey: ['todo', todoId],
+      queryFn: () => fetchTodo(todoId),
+    })
+  }
+
+  return (
+    <div>
+      {todos.map(todo => (
+        <div key={todo.id} onMouseEnter={() => handleMouseEnter(todo.id)}>
+          {todo.title}
+        </div>
+      ))}
+    </div>
+  )
+}
+```
+
+### Optimistic Updates
+
+```typescript
+interface Todo {
+  id: number
+  title: string
+}
+
+function UpdateTodo() {
+  const queryClient = useQueryClient()
+
+  const mutation = useMutation({
+    mutationFn: updateTodo,
+    onMutate: async (newTodo) => {
+      // Cancel outgoing refetches
+      await queryClient.cancelQueries({ queryKey: ['todos'] })
+
+      // Snapshot the previous value
+      const previousTodos = queryClient.getQueryData<Todo[]>(['todos'])
+
+      // Optimistically update to the new value
+      queryClient.setQueryData<Todo[]>(['todos'], (old = []) =>
+        old.map(todo => (todo.id === newTodo.id ? newTodo : todo))
+      )
+
+      // Return context with the snapshot
+      return { previousTodos }
+    },
+    onError: (err, newTodo, context) => {
+      // Rollback on error
+      queryClient.setQueryData(['todos'], context?.previousTodos)
+    },
+    onSettled: () => {
+      // Always refetch after error or success
+      queryClient.invalidateQueries({ queryKey: ['todos'] })
+    },
+  })
+
+  return null
+}
+```
+
+### Canceling Queries
+
+```typescript
+function SearchComponent() {
+  const queryClient = useQueryClient()
+
+  const handleCancel = async () => {
+    // Cancel all outgoing queries for 'search'
+    await queryClient.cancelQueries({ queryKey: ['search'] })
+  }
+
+  return <button onClick={handleCancel}>Cancel Search</button>
+}
+```
+
+### Removing Queries
+
+```typescript
+function ClearCache() {
+  const queryClient = useQueryClient()
+
+  const clearTodos = () => {
+    // Remove todos from cache
+    queryClient.removeQueries({ queryKey: ['todos'] })
+  }
+
+  const clearAllCache = () => {
+    // Clear all cache
+    queryClient.clear()
+  }
+
+  return (
+    <div>
+      <button onClick={clearTodos}>Clear Todos Cache</button>
+      <button onClick={clearAllCache}>Clear All Cache</button>
+    </div>
+  )
+}
+```
+
+### Checking Fetching State
+
+```typescript
+function GlobalLoader() {
+  const queryClient = useQueryClient()
+
+  // Check if any queries are fetching
+  const isFetching = queryClient.isFetching()
+
+  if (isFetching === 0) return null
+
+  return <div>Loading {isFetching} queries...</div>
+}
+```
+
+### Setting Default Options
+
+```typescript
+function SettingsComponent() {
+  const queryClient = useQueryClient()
+
+  const enableCache = () => {
+    queryClient.setQueryDefaults(['todos'], {
+      staleTime: 1000 * 60 * 5, // 5 minutes
+    })
+  }
+
+  return <button onClick={enableCache}>Enable Long Cache for Todos</button>
+}
+```
+
+### Ensuring Query Data
+
+```typescript
+function TodoDetails({ id }: { id: number }) {
+  const queryClient = useQueryClient()
+
+  const ensureTodoData = async () => {
+    // Fetch if not in cache, otherwise return cached data
+    const todo = await queryClient.ensureQueryData({
+      queryKey: ['todo', id],
+      queryFn: () => fetchTodo(id),
+    })
+    console.log('Todo:', todo)
+  }
+
+  return <button onClick={ensureTodoData}>Load Todo</button>
+}
+```
+
+## Notes
+
+<Note>
+  `useQueryClient` must be used within a component that is wrapped by `QueryClientProvider`.
+</Note>
+
+<Note>
+  If no `QueryClientProvider` is found in the component tree, the hook will throw an error.
+</Note>
+
+<Note>
+  Most QueryClient methods are synchronous except for methods like `fetchQuery`, `prefetchQuery`, and `cancelQueries` which return promises.
+</Note>
+
+<Note>
+  The QueryClient instance is stable across renders, so it's safe to use in dependency arrays.
+</Note>

@@ -1,0 +1,191 @@
+---
+title: Initial Query Data
+description: Learn how to configure initial data for your queries to provide instant UX before fetching fresh data
+---
+
+Initial query data allows you to provide pre-populated data to a query before it fetches. This is useful when you have data from server-side rendering, local storage, or other sources that can be used immediately while fresh data is being fetched in the background.
+
+## Basic Usage
+
+Provide initial data using the `initialData` option:
+
+```tsx
+import { useQuery } from '@tanstack/react-query'
+
+function Todo({ id }) {
+  const { data } = useQuery({
+    queryKey: ['todo', id],
+    queryFn: () => fetchTodo(id),
+    initialData: { id, title: 'Loading...', completed: false }
+  })
+
+  return <div>{data.title}</div>
+}
+```
+
+<Note>
+When `initialData` is provided, the query will immediately be in a `success` state with the initial data, but it will still fetch in the background if the data is stale.
+</Note>
+
+## Initial Data Function
+
+You can also provide a function that returns initial data. This is useful for deriving initial data from other queries:
+
+```tsx
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+
+function TodoDetail({ id }) {
+  const queryClient = useQueryClient()
+
+  const { data } = useQuery({
+    queryKey: ['todo', id],
+    queryFn: () => fetchTodo(id),
+    initialData: () => {
+      // Use a todo from the 'todos' query as initial data
+      return queryClient
+        .getQueryData(['todos'])
+        ?.find(todo => todo.id === id)
+    }
+  })
+
+  return <div>{data?.title}</div>
+}
+```
+
+## Initial Data Updated At
+
+Control when initial data is considered stale using `initialDataUpdatedAt`:
+
+```tsx
+import { useQuery } from '@tanstack/react-query'
+
+function Todo({ id, cachedTodo, cachedAt }) {
+  const { data, isFetching } = useQuery({
+    queryKey: ['todo', id],
+    queryFn: () => fetchTodo(id),
+    initialData: cachedTodo,
+    initialDataUpdatedAt: cachedAt,
+    staleTime: 5000 // 5 seconds
+  })
+
+  return (
+    <div>
+      <div>{data.title}</div>
+      {isFetching && <span>Updating...</span>}
+    </div>
+  )
+}
+```
+
+<Steps>
+  <Step title="Set initialData">
+    Provide the cached data to immediately render content
+  </Step>
+  <Step title="Set initialDataUpdatedAt">
+    Specify when the data was cached (timestamp in milliseconds)
+  </Step>
+  <Step title="Configure staleTime">
+    If the current time minus `initialDataUpdatedAt` is less than `staleTime`, the query won't refetch
+  </Step>
+</Steps>
+
+## Type Safety
+
+The `initialData` must match the query's data type:
+
+```tsx
+interface Todo {
+  id: number
+  title: string
+  completed: boolean
+}
+
+function useTodo(id: number) {
+  return useQuery({
+    queryKey: ['todo', id],
+    queryFn: async (): Promise<Todo> => {
+      const res = await fetch(`/api/todos/${id}`)
+      return res.json()
+    },
+    // ✅ Correct: matches Todo type
+    initialData: { id, title: '', completed: false },
+    // ❌ Error: missing required properties
+    // initialData: { id }
+  })
+}
+```
+
+## Behavior with Fetching State
+
+Even with `initialData`, queries will still fetch if the data is stale:
+
+```tsx
+function Todo() {
+  const { data, isFetching } = useQuery({
+    queryKey: ['todo'],
+    queryFn: async () => {
+      await sleep(1000)
+      return 'serverData'
+    },
+    initialData: 'initialData'
+  })
+
+  // First render:
+  // data: 'initialData'
+  // isFetching: true
+  
+  // After fetch completes:
+  // data: 'serverData'
+  // isFetching: false
+
+  return <div>{data}</div>
+}
+```
+
+<Warning>
+The query state will be `success` immediately, but `isFetching` will be `true` while the background fetch is in progress.
+</Warning>
+
+## Working with Falsy Values
+
+Falsy values like `0`, `false`, or `''` are valid initial data:
+
+```tsx
+function Counter() {
+  const { data } = useQuery({
+    queryKey: ['count'],
+    queryFn: () => fetchCount(),
+    initialData: 0  // ✅ Valid initial data
+  })
+
+  return <div>Count: {data}</div>
+}
+```
+
+## When to Use Initial Data
+
+<Tip>
+Use `initialData` when:
+- You have data from server-side rendering (SSR)
+- You're deriving data from another query in the cache
+- You have cached data from local storage
+- You want to provide a default value while fetching
+
+For loading states, consider using `placeholderData` instead.
+</Tip>
+
+## Differences from Placeholder Data
+
+| Feature | initialData | placeholderData |
+|---------|-------------|------------------|
+| Persisted to cache | ✅ Yes | ❌ No |
+| Marks query as successful | ✅ Yes | ❌ No |
+| Triggers `onSuccess` | ✅ Yes | ❌ No |
+| Can be invalidated | ✅ Yes | ❌ No |
+| Use case | Pre-populate with real data | Show loading state content |
+
+## See Also
+
+- [Placeholder Data](/guides/placeholder-query-data) - For temporary placeholder content
+- [Prefetching](/guides/prefetching) - For loading data before it's needed
+- [SSR & Hydration](/guides/ssr) - For server-side rendering patterns

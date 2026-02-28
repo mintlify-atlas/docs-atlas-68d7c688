@@ -1,122 +1,229 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "mint",
-  "name": "Mint Starter Kit",
+  "name": "TanStack Query",
+  "theme": "palm",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "primary": "#FF4154",
+    "light": "#FF4154",
+    "dark": "#FF4154"
   },
-  "favicon": "/favicon.svg",
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/tanstack/query"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/tanstack/query"
+    }
+  },
   "navigation": {
     "tabs": [
       {
-        "tab": "Guides",
+        "tab": "Get Started",
         "groups": [
           {
-            "group": "Getting started",
+            "group": "Introduction",
             "pages": [
-              "index",
-              "quickstart",
-              "development"
+              "introduction",
+              "installation",
+              "quickstart"
             ]
           },
           {
-            "group": "Customization",
+            "group": "Essentials",
             "pages": [
-              "essentials/settings",
-              "essentials/navigation"
-            ]
-          },
-          {
-            "group": "Writing content",
-            "pages": [
-              "essentials/markdown",
-              "essentials/code",
-              "essentials/images",
-              "essentials/reusable-snippets"
-            ]
-          },
-          {
-            "group": "AI tools",
-            "pages": [
-              "ai-tools/cursor",
-              "ai-tools/claude-code",
-              "ai-tools/windsurf"
+              "essentials/overview",
+              "essentials/typescript",
+              "essentials/devtools"
             ]
           }
         ]
       },
       {
-        "tab": "API reference",
+        "tab": "Guides",
         "groups": [
           {
-            "group": "API documentation",
+            "group": "Core Concepts",
             "pages": [
-              "api-reference/introduction"
+              "guides/queries",
+              "guides/mutations",
+              "guides/query-keys",
+              "guides/query-functions",
+              "guides/network-mode"
             ]
           },
           {
-            "group": "Endpoint examples",
+            "group": "Caching & Updates",
             "pages": [
-              "api-reference/endpoint/get",
-              "api-reference/endpoint/create",
-              "api-reference/endpoint/delete",
-              "api-reference/endpoint/webhook"
+              "guides/caching",
+              "guides/important-defaults",
+              "guides/invalidations-from-mutations",
+              "guides/optimistic-updates",
+              "guides/background-fetching-indicators"
+            ]
+          },
+          {
+            "group": "Advanced Patterns",
+            "pages": [
+              "guides/infinite-queries",
+              "guides/paginated-queries",
+              "guides/parallel-queries",
+              "guides/dependent-queries",
+              "guides/disabling-queries",
+              "guides/query-cancellation"
+            ]
+          },
+          {
+            "group": "Data Management",
+            "pages": [
+              "guides/initial-query-data",
+              "guides/placeholder-query-data",
+              "guides/prefetching",
+              "guides/default-query-function",
+              "guides/filters"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Framework Adapters",
+        "groups": [
+          {
+            "group": "React",
+            "pages": [
+              "frameworks/react/overview",
+              "frameworks/react/installation",
+              "frameworks/react/quick-start",
+              "frameworks/react/typescript",
+              "frameworks/react/devtools",
+              "frameworks/react/react-native",
+              "frameworks/react/graphql",
+              "frameworks/react/ssr"
+            ]
+          },
+          {
+            "group": "Vue",
+            "pages": [
+              "frameworks/vue/overview",
+              "frameworks/vue/installation",
+              "frameworks/vue/quick-start",
+              "frameworks/vue/typescript",
+              "frameworks/vue/devtools"
+            ]
+          },
+          {
+            "group": "Solid",
+            "pages": [
+              "frameworks/solid/overview",
+              "frameworks/solid/installation",
+              "frameworks/solid/quick-start",
+              "frameworks/solid/typescript",
+              "frameworks/solid/devtools"
+            ]
+          },
+          {
+            "group": "Svelte",
+            "pages": [
+              "frameworks/svelte/overview",
+              "frameworks/svelte/installation",
+              "frameworks/svelte/quick-start",
+              "frameworks/svelte/typescript",
+              "frameworks/svelte/devtools"
+            ]
+          },
+          {
+            "group": "Angular",
+            "pages": [
+              "frameworks/angular/overview",
+              "frameworks/angular/installation",
+              "frameworks/angular/quick-start",
+              "frameworks/angular/devtools"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Core",
+            "pages": [
+              "api/query-client",
+              "api/query-cache",
+              "api/mutation-cache",
+              "api/query-observer",
+              "api/infinite-query-observer",
+              "api/queries-observer",
+              "api/mutation-observer"
+            ]
+          },
+          {
+            "group": "React API",
+            "pages": [
+              "api/react/use-query",
+              "api/react/use-infinite-query",
+              "api/react/use-mutation",
+              "api/react/use-queries",
+              "api/react/use-suspense-query",
+              "api/react/use-query-client",
+              "api/react/query-client-provider",
+              "api/react/hydration-boundary"
+            ]
+          },
+          {
+            "group": "Managers",
+            "pages": [
+              "api/focus-manager",
+              "api/online-manager",
+              "api/notify-manager"
+            ]
+          },
+          {
+            "group": "Utilities",
+            "pages": [
+              "api/hydration",
+              "api/utilities"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Community",
+        "groups": [
+          {
+            "group": "Resources",
+            "pages": [
+              "community/community-resources",
+              "community/comparison"
+            ]
+          },
+          {
+            "group": "ESLint Plugin",
+            "pages": [
+              "eslint/eslint-plugin-query",
+              "eslint/exhaustive-deps",
+              "eslint/stable-query-client"
+            ]
+          },
+          {
+            "group": "Migration Guides",
+            "pages": [
+              "migration/migrating-to-v5",
+              "migration/migrating-to-v4",
+              "migration/migrating-to-v3"
+            ]
+          },
+          {
+            "group": "Plugins",
+            "pages": [
+              "plugins/persist-client",
+              "plugins/broadcast-client"
             ]
           }
         ]
       }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
-        },
-        {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
-        }
-      ]
-    }
-  },
-  "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
-  },
-  "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:hi@mintlify.com"
-      }
-    ],
-    "primary": {
-      "type": "button",
-      "label": "Dashboard",
-      "href": "https://dashboard.mintlify.com"
-    }
-  },
-  "contextual": {
-    "options": [
-     "copy",
-     "view",
-     "chatgpt",
-     "claude",
-     "perplexity",
-     "mcp",
-     "cursor",
-     "vscode"
-   ]
-  },
-  "footer": {
-    "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
-    }
+    ]
   }
 }

@@ -1,0 +1,296 @@
+---
+title: Placeholder Query Data
+description: Use placeholder data to show temporary content while queries are loading
+---
+
+Placeholder data allows you to display temporary content while a query is fetching. Unlike `initialData`, placeholder data is not persisted to the cache and doesn't affect the query's state.
+
+## Basic Usage
+
+Provide placeholder data using the `placeholderData` option:
+
+```tsx
+import { useQuery } from '@tanstack/react-query'
+
+function Todo({ id }) {
+  const { data, isPlaceholderData } = useQuery({
+    queryKey: ['todo', id],
+    queryFn: () => fetchTodo(id),
+    placeholderData: {
+      id,
+      title: 'Loading...',
+      completed: false
+    }
+  })
+
+  return (
+    <div>
+      <h1>{data.title}</h1>
+      {isPlaceholderData && <span className="loading">Loading...</span>}
+    </div>
+  )
+}
+```
+
+<Note>
+The `isPlaceholderData` flag tells you when you're showing placeholder data vs. real data.
+</Note>
+
+## Keep Previous Data
+
+A common pattern is keeping the previous query's data while fetching new data. Use the `keepPreviousData` helper:
+
+```tsx
+import { useQuery, keepPreviousData } from '@tanstack/react-query'
+
+function Todos({ page }) {
+  const { data, isPlaceholderData } = useQuery({
+    queryKey: ['todos', page],
+    queryFn: () => fetchTodos(page),
+    placeholderData: keepPreviousData
+  })
+
+  return (
+    <div>
+      <ul>
+        {data.items.map(todo => (
+          <li key={todo.id}>{todo.title}</li>
+        ))}
+      </ul>
+      {isPlaceholderData && <div>Loading new page...</div>}
+      <button onClick={() => setPage(p => p - 1)}>Previous</button>
+      <button onClick={() => setPage(p => p + 1)}>Next</button>
+    </div>
+  )
+}
+```
+
+<Tip>
+The `keepPreviousData` function returns the previous data when available, preventing content from disappearing during pagination or filtering.
+</Tip>
+
+## Placeholder Data Function
+
+Compute placeholder data dynamically using a function:
+
+```tsx
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+
+function TodoDetail({ id }) {
+  const queryClient = useQueryClient()
+
+  const { data, isPlaceholderData } = useQuery({
+    queryKey: ['todo', id],
+    queryFn: () => fetchTodo(id),
+    placeholderData: () => {
+      // Find this todo in the cached 'todos' list
+      const todos = queryClient.getQueryData(['todos'])
+      return todos?.find(todo => todo.id === id)
+    }
+  })
+
+  return (
+    <div>
+      <h1>{data?.title}</h1>
+      {isPlaceholderData && <p>Showing cached preview...</p>}
+    </div>
+  )
+}
+```
+
+## With Select Transform
+
+Placeholder data works correctly with `select` transforms:
+
+```tsx
+import { useQuery, keepPreviousData } from '@tanstack/react-query'
+
+function TodoCount({ filter }) {
+  const { data, isPlaceholderData } = useQuery({
+    queryKey: ['todos', filter],
+    queryFn: () => fetchTodos(filter),
+    select: (todos) => todos.length,
+    placeholderData: keepPreviousData
+  })
+
+  return (
+    <div>
+      <p>Count: {data}</p>
+      {isPlaceholderData && <span>Updating...</span>}
+    </div>
+  )
+}
+```
+
+<Steps>
+  <Step title="Previous data is kept">
+    The previous query result is used as placeholder data
+  </Step>
+  <Step title="Select function runs">
+    The `select` transform runs on the placeholder data
+  </Step>
+  <Step title="New data replaces placeholder">
+    When the fetch completes, real data replaces the placeholder
+  </Step>
+</Steps>
+
+## Query State Behavior
+
+Placeholder data affects the query state differently than initial data:
+
+```tsx
+function Example() {
+  const { data, status, fetchStatus, isPlaceholderData } = useQuery({
+    queryKey: ['data'],
+    queryFn: fetchData,
+    placeholderData: { value: 'placeholder' }
+  })
+
+  // While loading with placeholder:
+  // status: 'pending'
+  // fetchStatus: 'fetching'
+  // isPlaceholderData: true
+  // data: { value: 'placeholder' }
+
+  // After fetch completes:
+  // status: 'success'
+  // fetchStatus: 'idle'
+  // isPlaceholderData: false
+  // data: { value: 'real data' }
+}
+```
+
+<Warning>
+Placeholder data does not change the query `status` to `success`. The query remains in `pending` state until real data is fetched.
+</Warning>
+
+## Pagination Example
+
+A complete pagination example using `keepPreviousData`:
+
+```tsx
+import { useQuery, keepPreviousData } from '@tanstack/react-query'
+import { useState } from 'react'
+
+function PaginatedTodos() {
+  const [page, setPage] = useState(0)
+
+  const { data, isPlaceholderData, isPending } = useQuery({
+    queryKey: ['todos', page],
+    queryFn: async () => {
+      const res = await fetch(`/api/todos?page=${page}`)
+      return res.json()
+    },
+    placeholderData: keepPreviousData,
+    staleTime: 5000
+  })
+
+  return (
+    <div>
+      {isPending && !isPlaceholderData ? (
+        <div>Loading first page...</div>
+      ) : (
+        <>
+          <ul>
+            {data.items.map(todo => (
+              <li key={todo.id}>
+                {todo.title}
+              </li>
+            ))}
+          </ul>
+          
+          <div>
+            <button
+              onClick={() => setPage(old => Math.max(0, old - 1))}
+              disabled={page === 0}
+            >
+              Previous
+            </button>
+            <span>Page {page + 1}</span>
+            <button
+              onClick={() => setPage(old => old + 1)}
+              disabled={isPlaceholderData || !data.hasMore}
+            >
+              Next
+            </button>
+          </div>
+          
+          {isPlaceholderData && (
+            <div className="loading-overlay">
+              Loading next page...
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+```
+
+## TypeScript
+
+Placeholder data must match the query's data type:
+
+```tsx
+interface Todo {
+  id: number
+  title: string
+  completed: boolean
+}
+
+function useTodo(id: number) {
+  return useQuery({
+    queryKey: ['todo', id],
+    queryFn: async (): Promise<Todo> => {
+      const res = await fetch(`/api/todos/${id}`)
+      return res.json()
+    },
+    // ✅ Correct: matches Todo type
+    placeholderData: { id, title: 'Loading...', completed: false },
+    // ❌ Error: incompatible type
+    // placeholderData: 'loading'
+  })
+}
+```
+
+## When to Use Placeholder Data
+
+<Tip>
+Use `placeholderData` when:
+- You want to keep previous results during pagination
+- You're implementing optimistic UI updates
+- You want to show a skeleton or loading state with partial data
+- You need temporary data that shouldn't be cached
+
+For pre-populating with real data, use `initialData` instead.
+</Tip>
+
+## keepPreviousData Implementation
+
+The `keepPreviousData` helper is a simple function that returns the previous data:
+
+```ts
+export function keepPreviousData<T>(
+  previousData: T | undefined,
+): T | undefined {
+  return previousData
+}
+```
+
+Source: packages/query-core/src/utils.ts:407
+
+## Differences from Initial Data
+
+| Feature | placeholderData | initialData |
+|---------|-----------------|-------------|
+| Persisted to cache | ❌ No | ✅ Yes |
+| Changes query status | ❌ No | ✅ Yes (to success) |
+| Triggers callbacks | ❌ No | ✅ Yes |
+| Temporary | ✅ Yes | ❌ No |
+| Use case | Loading states, pagination | SSR, pre-populated data |
+
+## See Also
+
+- [Initial Data](/guides/initial-query-data) - For persisting data to the cache
+- [Paginated Queries](/guides/paginated-queries) - Complete pagination guide
+- [Optimistic Updates](/guides/optimistic-updates) - For mutation optimistic UI

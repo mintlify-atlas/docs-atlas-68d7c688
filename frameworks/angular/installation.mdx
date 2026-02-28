@@ -1,0 +1,347 @@
+---
+title: Installation
+description: Install and configure Angular Query in your Angular application
+---
+
+This guide walks you through installing and setting up Angular Query in your Angular application.
+
+## Prerequisites
+
+Before installing Angular Query, ensure your project meets these requirements:
+
+- **Angular 16+** - Angular Query uses signals and modern Angular features
+- **TypeScript 5.0+** - Required for full type inference
+- **Node.js 16+** - For package installation
+
+## Installation
+
+<Steps>
+
+### Install the package
+
+Install Angular Query using your preferred package manager:
+
+<CodeGroup>
+
+```bash npm
+npm install @tanstack/angular-query-experimental
+```
+
+```bash pnpm
+pnpm add @tanstack/angular-query-experimental
+```
+
+```bash yarn
+yarn add @tanstack/angular-query-experimental
+```
+
+```bash bun
+bun add @tanstack/angular-query-experimental
+```
+
+</CodeGroup>
+
+<Note>
+The package name includes `-experimental` because Angular Query is currently in experimental stage. This means breaking changes may occur in minor and patch releases.
+</Note>
+
+### Set up the QueryClient
+
+Angular Query requires a `QueryClient` to manage your queries and mutations. You can configure it globally in your application.
+
+<Tabs>
+  <Tab title="Standalone (Recommended)">
+
+For standalone Angular applications (Angular 14+), use `bootstrapApplication` with providers:
+
+```typescript main.ts
+import { bootstrapApplication } from '@angular/platform-browser'
+import { ApplicationConfig } from '@angular/core'
+import { 
+  provideTanStackQuery,
+  QueryClient 
+} from '@tanstack/angular-query-experimental'
+import { AppComponent } from './app/app.component'
+
+export const appConfig: ApplicationConfig = {
+  providers: [
+    provideTanStackQuery(new QueryClient())
+  ]
+}
+
+bootstrapApplication(AppComponent, appConfig)
+```
+
+  </Tab>
+  <Tab title="NgModule">
+
+For NgModule-based applications, add the provider to your root module:
+
+```typescript app.module.ts
+import { NgModule } from '@angular/core'
+import { BrowserModule } from '@angular/platform-browser'
+import { 
+  provideTanStackQuery,
+  QueryClient 
+} from '@tanstack/angular-query-experimental'
+import { AppComponent } from './app.component'
+
+@NgModule({
+  declarations: [AppComponent],
+  imports: [BrowserModule],
+  providers: [
+    provideTanStackQuery(new QueryClient())
+  ],
+  bootstrap: [AppComponent]
+})
+export class AppModule {}
+```
+
+  </Tab>
+</Tabs>
+
+### (Optional) Configure the QueryClient
+
+You can customize the `QueryClient` with default options:
+
+```typescript main.ts
+import { 
+  provideTanStackQuery,
+  QueryClient 
+} from '@tanstack/angular-query-experimental'
+
+export const appConfig: ApplicationConfig = {
+  providers: [
+    provideTanStackQuery(
+      new QueryClient({
+        defaultOptions: {
+          queries: {
+            staleTime: 1000 * 60 * 5, // 5 minutes
+            gcTime: 1000 * 60 * 10, // 10 minutes (formerly cacheTime)
+            retry: 3,
+            refetchOnWindowFocus: true,
+          },
+        },
+      })
+    )
+  ]
+}
+```
+
+<Tip>
+These default options apply to all queries and mutations in your application, but can be overridden on a per-query basis.
+</Tip>
+
+### (Optional) Install DevTools
+
+For development and debugging, install the optional DevTools package:
+
+```bash
+npm install @tanstack/query-devtools
+```
+
+Then enable DevTools in your application config:
+
+```typescript main.ts
+import { 
+  provideTanStackQuery,
+  QueryClient,
+  withDevtools
+} from '@tanstack/angular-query-experimental'
+
+export const appConfig: ApplicationConfig = {
+  providers: [
+    provideTanStackQuery(
+      new QueryClient(),
+      withDevtools() // Enables devtools in development mode
+    )
+  ]
+}
+```
+
+The DevTools will automatically appear in development mode. See the [DevTools documentation](/frameworks/angular/devtools) for more options.
+
+</Steps>
+
+## Advanced Configuration
+
+### Using InjectionToken
+
+For advanced use cases like lazy loading, you can provide the `QueryClient` using an `InjectionToken`:
+
+```typescript query-client.ts
+import { InjectionToken } from '@angular/core'
+import { QueryClient } from '@tanstack/angular-query-experimental'
+
+export const MY_QUERY_CLIENT = new InjectionToken<QueryClient>('MyQueryClient', {
+  factory: () => new QueryClient({
+    defaultOptions: {
+      queries: {
+        staleTime: 1000 * 60 * 5,
+      },
+    },
+  }),
+})
+```
+
+Then use it in lazy loaded routes:
+
+```typescript app.routes.ts
+import { Routes } from '@angular/router'
+import { provideTanStackQuery } from '@tanstack/angular-query-experimental'
+import { MY_QUERY_CLIENT } from './query-client'
+
+export const routes: Routes = [
+  {
+    path: 'dashboard',
+    loadComponent: () => import('./dashboard/dashboard.component'),
+    providers: [
+      provideTanStackQuery(MY_QUERY_CLIENT)
+    ]
+  }
+]
+```
+
+<Note>
+Using an `InjectionToken` allows TanStack Query to be excluded from the main application bundle and only loaded with specific routes.
+</Note>
+
+### Multiple QueryClient Instances
+
+You can provide different `QueryClient` instances for different parts of your application:
+
+```typescript lazy-route.ts
+import { Route } from '@angular/router'
+import { 
+  provideTanStackQuery,
+  QueryClient 
+} from '@tanstack/angular-query-experimental'
+
+export const route: Route = {
+  path: 'admin',
+  loadComponent: () => import('./admin/admin.component'),
+  providers: [
+    // Separate QueryClient for admin section
+    provideTanStackQuery(
+      new QueryClient({
+        defaultOptions: {
+          queries: {
+            staleTime: 0, // Always fresh for admin data
+            gcTime: 0, // No caching
+          },
+        },
+      })
+    )
+  ]
+}
+```
+
+### Server-Side Rendering (SSR)
+
+For Angular Universal applications, ensure the `QueryClient` is provided correctly:
+
+```typescript app.config.server.ts
+import { mergeApplicationConfig } from '@angular/core'
+import { provideServerRendering } from '@angular/platform-server'
+import { 
+  provideTanStackQuery,
+  QueryClient 
+} from '@tanstack/angular-query-experimental'
+import { appConfig } from './app.config'
+
+const serverConfig: ApplicationConfig = {
+  providers: [
+    provideServerRendering(),
+    // Provide a fresh QueryClient for each SSR request
+    provideTanStackQuery(new QueryClient({
+      defaultOptions: {
+        queries: {
+          staleTime: Infinity, // Don't refetch during SSR
+        },
+      },
+    }))
+  ]
+}
+
+export const config = mergeApplicationConfig(appConfig, serverConfig)
+```
+
+<Warning>
+For SSR, create a new `QueryClient` instance per request to avoid sharing state between users.
+</Warning>
+
+## Verify Installation
+
+Create a simple component to verify the installation:
+
+```typescript test.component.ts
+import { Component } from '@angular/core'
+import { injectQuery } from '@tanstack/angular-query-experimental'
+
+@Component({
+  selector: 'app-test',
+  standalone: true,
+  template: `
+    <div>
+      @if (query.isPending()) {
+        <p>Loading...</p>
+      }
+      @if (query.isSuccess()) {
+        <p>Data: {{ query.data() }}</p>
+      }
+    </div>
+  `
+})
+export class TestComponent {
+  query = injectQuery(() => ({
+    queryKey: ['test'],
+    queryFn: async () => {
+      await new Promise(resolve => setTimeout(resolve, 1000))
+      return 'Angular Query is working!'
+    }
+  }))
+}
+```
+
+If you see "Angular Query is working!" after 1 second, your installation is complete!
+
+## Troubleshooting
+
+### Error: "No QueryClient found"
+
+This error occurs when `provideTanStackQuery` is not in the provider tree. Ensure you've added it to your application config or module providers.
+
+### Error: "injectQuery must be called in an injection context"
+
+Angular Query hooks must be called during component/service construction. See the [injection context documentation](/frameworks/angular/overview#injection-context) for solutions.
+
+### TypeScript Errors
+
+Ensure you're using TypeScript 5.0 or higher. Update your `tsconfig.json`:
+
+```json tsconfig.json
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "dom"],
+    "strict": true
+  }
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="rocket" href="/frameworks/angular/quick-start">
+    Build your first query
+  </Card>
+  <Card title="Queries Guide" icon="book" href="/frameworks/angular/guides/queries">
+    Learn about queries in depth
+  </Card>
+  <Card title="DevTools" icon="code" href="/frameworks/angular/devtools">
+    Set up debugging tools
+  </Card>
+  <Card title="API Reference" icon="code" href="/frameworks/angular/reference/injectQuery">
+    Explore the full API
+  </Card>
+</CardGroup>

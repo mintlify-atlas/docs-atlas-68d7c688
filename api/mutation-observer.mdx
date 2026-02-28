@@ -1,0 +1,398 @@
+---
+title: MutationObserver
+description: The MutationObserver subscribes to a mutation and provides reactive updates.
+---
+
+## Overview
+
+The `MutationObserver` class is used to subscribe to a mutation and receive reactive updates when the mutation's state changes. It's the foundation for framework-specific hooks like `useMutation` in React.
+
+## Constructor
+
+```typescript
+const observer = new MutationObserver<TData, TError, TVariables, TOnMutateResult>(
+  client: QueryClient,
+  options: MutationObserverOptions<TData, TError, TVariables, TOnMutateResult>
+)
+```
+
+<ParamField path="client" type="QueryClient" required>
+  The QueryClient instance
+</ParamField>
+
+<ParamField path="options" type="MutationObserverOptions" required>
+  Options for the mutation observer
+  
+  <Expandable title="properties">
+    <ParamField path="mutationFn" type="(variables: TVariables, context: MutationFunctionContext) => Promise<TData>" optional>
+      The function to execute the mutation
+    </ParamField>
+    
+    <ParamField path="mutationKey" type="MutationKey" optional>
+      Unique key for the mutation
+    </ParamField>
+    
+    <ParamField path="onMutate" type="(variables: TVariables, context: MutationFunctionContext) => Promise<TOnMutateResult> | TOnMutateResult" optional>
+      Callback fired before the mutation function. Return value is passed to other callbacks.
+    </ParamField>
+    
+    <ParamField path="onSuccess" type="(data: TData, variables: TVariables, onMutateResult: TOnMutateResult, context: MutationFunctionContext) => Promise<unknown> | unknown" optional>
+      Callback fired when the mutation succeeds
+    </ParamField>
+    
+    <ParamField path="onError" type="(error: TError, variables: TVariables, onMutateResult: TOnMutateResult | undefined, context: MutationFunctionContext) => Promise<unknown> | unknown" optional>
+      Callback fired when the mutation errors
+    </ParamField>
+    
+    <ParamField path="onSettled" type="(data: TData | undefined, error: TError | null, variables: TVariables, onMutateResult: TOnMutateResult | undefined, context: MutationFunctionContext) => Promise<unknown> | unknown" optional>
+      Callback fired when the mutation completes (success or error)
+    </ParamField>
+    
+    <ParamField path="retry" type="boolean | number | ((failureCount: number, error: TError) => boolean)" optional>
+      Retry failed mutations
+    </ParamField>
+    
+    <ParamField path="retryDelay" type="number | ((failureCount: number, error: TError) => number)" optional>
+      Delay between retry attempts in milliseconds
+    </ParamField>
+    
+    <ParamField path="networkMode" type="'online' | 'always' | 'offlineFirst'" optional>
+      Network mode for the mutation. Defaults to `'online'`.
+    </ParamField>
+    
+    <ParamField path="gcTime" type="number" optional>
+      Time in milliseconds that unused mutation results remain in memory
+    </ParamField>
+    
+    <ParamField path="scope" type="{ id: string }" optional>
+      Scope for sequential mutation execution
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+**Example:**
+
+```typescript
+const observer = new MutationObserver(queryClient, {
+  mutationFn: async (newTodo) => {
+    const response = await fetch('/api/todos', {
+      method: 'POST',
+      body: JSON.stringify(newTodo),
+    })
+    return response.json()
+  },
+  onSuccess: (data) => {
+    console.log('Todo created:', data)
+  },
+})
+```
+
+## Methods
+
+### subscribe()
+
+Subscribes to mutation updates.
+
+```typescript
+const unsubscribe = observer.subscribe(
+  listener: (result: MutationObserverResult<TData, TError, TVariables, TOnMutateResult>) => void
+): () => void
+```
+
+<ParamField path="listener" type="(result: MutationObserverResult<TData, TError, TVariables, TOnMutateResult>) => void" required>
+  Callback function that receives mutation results
+</ParamField>
+
+**Returns:** Function to unsubscribe
+
+**Example:**
+
+```typescript
+const unsubscribe = observer.subscribe((result) => {
+  console.log('Status:', result.status)
+  console.log('Data:', result.data)
+  console.log('Is pending:', result.isPending)
+})
+
+// Later, unsubscribe
+unsubscribe()
+```
+
+### getCurrentResult()
+
+Returns the current result without subscribing.
+
+```typescript
+const result = observer.getCurrentResult(): MutationObserverResult<TData, TError, TVariables, TOnMutateResult>
+```
+
+**Returns:** Current mutation result
+
+<ResponseField name="MutationObserverResult" type="object">
+  <Expandable title="properties">
+    <ResponseField name="data" type="TData | undefined">
+      The data returned from the mutation
+    </ResponseField>
+    
+    <ResponseField name="error" type="TError | null">
+      The error object if mutation failed
+    </ResponseField>
+    
+    <ResponseField name="variables" type="TVariables | undefined">
+      The variables passed to the mutation function
+    </ResponseField>
+    
+    <ResponseField name="context" type="TOnMutateResult | undefined">
+      The value returned from onMutate
+    </ResponseField>
+    
+    <ResponseField name="status" type="'idle' | 'pending' | 'success' | 'error'">
+      The status of the mutation
+    </ResponseField>
+    
+    <ResponseField name="isPending" type="boolean">
+      Is `true` when the mutation is currently executing
+    </ResponseField>
+    
+    <ResponseField name="isSuccess" type="boolean">
+      Is `true` when the mutation has succeeded
+    </ResponseField>
+    
+    <ResponseField name="isError" type="boolean">
+      Is `true` when the mutation has failed
+    </ResponseField>
+    
+    <ResponseField name="isIdle" type="boolean">
+      Is `true` when the mutation is in its initial state
+    </ResponseField>
+    
+    <ResponseField name="mutate" type="(variables: TVariables, options?: MutateOptions) => Promise<TData>">
+      Function to trigger the mutation
+    </ResponseField>
+    
+    <ResponseField name="reset" type="() => void">
+      Function to reset the mutation to its initial state
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### setOptions()
+
+Updates the observer's options.
+
+```typescript
+observer.setOptions(
+  options: MutationObserverOptions<TData, TError, TVariables, TOnMutateResult>
+): void
+```
+
+<ParamField path="options" type="MutationObserverOptions" required>
+  New options for the observer
+</ParamField>
+
+**Example:**
+
+```typescript
+observer.setOptions({
+  mutationFn: updatedMutationFn,
+  onSuccess: (data) => {
+    console.log('Success with new callback:', data)
+  },
+})
+```
+
+### mutate()
+
+Executes the mutation.
+
+```typescript
+const promise = observer.mutate(
+  variables: TVariables,
+  options?: MutateOptions<TData, TError, TVariables, TOnMutateResult>
+): Promise<TData>
+```
+
+<ParamField path="variables" type="TVariables" required>
+  Variables to pass to the mutation function
+</ParamField>
+
+<ParamField path="options" type="MutateOptions" optional>
+  Additional options for this specific mutation call
+  
+  <Expandable title="properties">
+    <ParamField path="onSuccess" type="(data: TData, variables: TVariables, onMutateResult: TOnMutateResult | undefined, context: MutationFunctionContext) => void" optional>
+      Callback for this specific mutation success
+    </ParamField>
+    
+    <ParamField path="onError" type="(error: TError, variables: TVariables, onMutateResult: TOnMutateResult | undefined, context: MutationFunctionContext) => void" optional>
+      Callback for this specific mutation error
+    </ParamField>
+    
+    <ParamField path="onSettled" type="(data: TData | undefined, error: TError | null, variables: TVariables, onMutateResult: TOnMutateResult | undefined, context: MutationFunctionContext) => void" optional>
+      Callback for this specific mutation completion
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+**Returns:** Promise that resolves with the mutation data or rejects with the error
+
+**Example:**
+
+```typescript
+try {
+  const data = await observer.mutate(
+    { title: 'New Todo', completed: false },
+    {
+      onSuccess: (data) => {
+        console.log('This todo was created:', data)
+      },
+    }
+  )
+  console.log('Created:', data)
+} catch (error) {
+  console.error('Failed to create todo:', error)
+}
+```
+
+### reset()
+
+Resets the mutation to its initial idle state.
+
+```typescript
+observer.reset(): void
+```
+
+**Example:**
+
+```typescript
+observer.reset()
+```
+
+<Note>
+  Resetting removes the observer from the current mutation. A new call to `mutate()` will create a new mutation instance.
+</Note>
+
+## Properties
+
+### options
+
+The current options for the observer.
+
+```typescript
+observer.options: MutationObserverOptions<TData, TError, TVariables, TOnMutateResult>
+```
+
+## Type Parameters
+
+- `TData` - The type of data returned by the mutation function
+- `TError` - The type of error that can be thrown (defaults to `DefaultError`)
+- `TVariables` - The type of variables passed to the mutation function (defaults to `void`)
+- `TOnMutateResult` - The type of value returned by the `onMutate` callback
+
+## Usage Example
+
+```typescript
+import { QueryClient, MutationObserver } from '@tanstack/query-core'
+
+const queryClient = new QueryClient()
+
+interface Todo {
+  id: number
+  title: string
+  completed: boolean
+}
+
+interface NewTodo {
+  title: string
+  completed: boolean
+}
+
+const observer = new MutationObserver<Todo, Error, NewTodo>(
+  queryClient,
+  {
+    mutationFn: async (newTodo) => {
+      const response = await fetch('/api/todos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newTodo),
+      })
+      if (!response.ok) throw new Error('Failed to create todo')
+      return response.json()
+    },
+    onMutate: async (newTodo) => {
+      // Optimistically update the UI
+      const previousTodos = queryClient.getQueryData(['todos'])
+      queryClient.setQueryData(['todos'], (old) => [...old, newTodo])
+      return { previousTodos }
+    },
+    onError: (error, newTodo, context) => {
+      // Rollback on error
+      if (context?.previousTodos) {
+        queryClient.setQueryData(['todos'], context.previousTodos)
+      }
+    },
+    onSuccess: (data) => {
+      // Invalidate and refetch
+      queryClient.invalidateQueries({ queryKey: ['todos'] })
+    },
+  }
+)
+
+// Subscribe to updates
+const unsubscribe = observer.subscribe((result) => {
+  if (result.isPending) {
+    console.log('Creating todo...')
+  } else if (result.isError) {
+    console.error('Error:', result.error)
+  } else if (result.isSuccess) {
+    console.log('Todo created:', result.data)
+  }
+})
+
+// Execute the mutation
+try {
+  const newTodo = await observer.mutate({
+    title: 'Learn TanStack Query',
+    completed: false,
+  })
+  console.log('Created todo:', newTodo)
+} catch (error) {
+  console.error('Failed:', error)
+}
+
+// Later, clean up
+unsubscribe()
+```
+
+## Optimistic Updates
+
+The MutationObserver is commonly used for optimistic updates:
+
+```typescript
+const observer = new MutationObserver(queryClient, {
+  mutationFn: updateTodo,
+  onMutate: async (updatedTodo) => {
+    // Cancel outgoing refetches
+    await queryClient.cancelQueries({ queryKey: ['todos', updatedTodo.id] })
+    
+    // Snapshot the previous value
+    const previousTodo = queryClient.getQueryData(['todos', updatedTodo.id])
+    
+    // Optimistically update
+    queryClient.setQueryData(['todos', updatedTodo.id], updatedTodo)
+    
+    // Return context with the snapshot
+    return { previousTodo }
+  },
+  onError: (error, updatedTodo, context) => {
+    // Rollback to the previous value
+    if (context?.previousTodo) {
+      queryClient.setQueryData(['todos', updatedTodo.id], context.previousTodo)
+    }
+  },
+  onSettled: (data, error, updatedTodo) => {
+    // Always refetch after error or success
+    queryClient.invalidateQueries({ queryKey: ['todos', updatedTodo.id] })
+  },
+})
+```

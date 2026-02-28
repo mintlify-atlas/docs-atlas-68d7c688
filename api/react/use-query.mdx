@@ -1,0 +1,398 @@
+---
+title: useQuery
+description: API reference for the useQuery hook
+---
+
+The `useQuery` hook is the primary way to fetch data in TanStack Query. It manages the lifecycle of a query, including caching, background updates, and stale data management.
+
+## Import
+
+```typescript
+import { useQuery } from '@tanstack/react-query'
+```
+
+## Signature
+
+```typescript
+function useQuery<
+  TQueryFnData = unknown,
+  TError = DefaultError,
+  TData = TQueryFnData,
+  TQueryKey extends QueryKey = QueryKey,
+>(
+  options: UseQueryOptions<TQueryFnData, TError, TData, TQueryKey>,
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError>
+```
+
+## Parameters
+
+<ParamField path="options" type="object" required>
+  The query options object.
+
+  <Expandable title="properties">
+    <ParamField path="queryKey" type="QueryKey" required>
+      A unique key for the query. Must be an array. The query will automatically update when this key changes.
+      
+      ```typescript
+      queryKey: ['todos']
+      queryKey: ['todo', todoId]
+      queryKey: ['todos', { status, page }]
+      ```
+    </ParamField>
+
+    <ParamField path="queryFn" type="QueryFunction<TQueryFnData, TQueryKey>" required>
+      The function that the query will use to request data. Must return a promise that resolves data or throws an error.
+      
+      Receives a `QueryFunctionContext` object with:
+      - `queryKey: TQueryKey` - The query key
+      - `signal: AbortSignal` - AbortSignal instance for query cancellation
+      - `meta: QueryMeta | undefined` - Optional query metadata
+      - `client: QueryClient` - The QueryClient instance
+      
+      ```typescript
+      queryFn: ({ queryKey, signal }) => fetchTodos(queryKey[1], signal)
+      ```
+    </ParamField>
+
+    <ParamField path="enabled" type="boolean | ((query: Query) => boolean)" default="true">
+      Set to `false` to disable automatic execution of the query. Useful for dependent queries.
+      
+      ```typescript
+      enabled: !!userId
+      ```
+    </ParamField>
+
+    <ParamField path="staleTime" type="number | 'static' | ((query: Query) => number | 'static')" default="0">
+      The time in milliseconds after data is considered stale. When set to `Infinity` or `'static'`, data will never be considered stale.
+      
+      ```typescript
+      staleTime: 5000 // 5 seconds
+      staleTime: Infinity
+      staleTime: 'static'
+      ```
+    </ParamField>
+
+    <ParamField path="gcTime" type="number" default="300000">
+      The time in milliseconds that unused/inactive cache data remains in memory. When a query's cache becomes unused or inactive, that cache data will be garbage collected after this duration. Set to `Infinity` to disable garbage collection.
+      
+      ```typescript
+      gcTime: 1000 * 60 * 60 * 24 // 24 hours
+      ```
+    </ParamField>
+
+    <ParamField path="refetchInterval" type="number | false | ((query: Query) => number | false)" default="false">
+      If set to a number, the query will continuously refetch at this frequency in milliseconds.
+      
+      ```typescript
+      refetchInterval: 1000 // refetch every second
+      ```
+    </ParamField>
+
+    <ParamField path="refetchIntervalInBackground" type="boolean" default="false">
+      If set to `true`, the query will continue to refetch while the browser tab is in the background.
+    </ParamField>
+
+    <ParamField path="refetchOnWindowFocus" type="boolean | 'always' | ((query: Query) => boolean | 'always')" default="true">
+      If set to `true`, the query will refetch on window focus if the data is stale. If set to `'always'`, the query will always refetch on window focus.
+    </ParamField>
+
+    <ParamField path="refetchOnReconnect" type="boolean | 'always' | ((query: Query) => boolean | 'always')" default="true">
+      If set to `true`, the query will refetch on reconnect if the data is stale. If set to `'always'`, the query will always refetch on reconnect.
+    </ParamField>
+
+    <ParamField path="refetchOnMount" type="boolean | 'always' | ((query: Query) => boolean | 'always')" default="true">
+      If set to `true`, the query will refetch on mount if the data is stale. If set to `'always'`, the query will always refetch on mount. If set to `false`, will disable additional instances of a query to trigger background refetch.
+    </ParamField>
+
+    <ParamField path="retry" type="boolean | number | ((failureCount: number, error: TError) => boolean)" default="3">
+      If `false`, failed queries will not retry. If `true`, failed queries will retry infinitely. If set to a number, failed queries will retry until the failure count meets that number.
+      
+      ```typescript
+      retry: 3
+      retry: false
+      retry: (failureCount, error) => failureCount < 3 && error.status !== 404
+      ```
+    </ParamField>
+
+    <ParamField path="retryDelay" type="number | ((failureCount: number, error: TError) => number)" default="attemptIndex => Math.min(1000 * 2 ** attemptIndex, 30000)">
+      This function receives a `failureCount` integer and the actual error and returns the delay to apply before the next attempt in milliseconds.
+      
+      ```typescript
+      retryDelay: 1000 // Always wait 1 second
+      retryDelay: attemptIndex => Math.min(1000 * 2 ** attemptIndex, 30000)
+      ```
+    </ParamField>
+
+    <ParamField path="select" type="(data: TQueryData) => TData">
+      This option can be used to transform or select a part of the data returned by the query function.
+      
+      ```typescript
+      select: data => data.items
+      ```
+    </ParamField>
+
+    <ParamField path="initialData" type="TData | () => TData">
+      If set, this value will be used as the initial data for the query cache (as long as the query hasn't been created or cached yet).
+      
+      ```typescript
+      initialData: { items: [] }
+      initialData: () => getCachedData()
+      ```
+    </ParamField>
+
+    <ParamField path="initialDataUpdatedAt" type="number | (() => number | undefined)">
+      If set, this value will be used as the time (in milliseconds) of when the `initialData` itself was last updated.
+    </ParamField>
+
+    <ParamField path="placeholderData" type="TData | ((previousData: TData | undefined, previousQuery: Query | undefined) => TData | undefined)">
+      If set, this value will be used as the placeholder data for this particular query observer while the query is still in the pending state.
+      
+      ```typescript
+      placeholderData: { items: [] }
+      placeholderData: (previousData) => previousData
+      ```
+    </ParamField>
+
+    <ParamField path="structuralSharing" type="boolean | ((oldData: unknown | undefined, newData: unknown) => unknown)" default="true">
+      Set to `false` to disable structural sharing between query results. Set to a function to implement custom structural sharing logic.
+    </ParamField>
+
+    <ParamField path="throwOnError" type="boolean | ((error: TError, query: Query) => boolean)" default="false">
+      Set to `true` to throw errors instead of setting the `error` property. Can be set to a function to conditionally throw errors.
+      
+      ```typescript
+      throwOnError: true
+      throwOnError: (error) => error.status >= 500
+      ```
+    </ParamField>
+
+    <ParamField path="networkMode" type="'online' | 'always' | 'offlineFirst'" default="'online'">
+      - `'online'` - Queries will not fire unless there is a network connection
+      - `'always'` - Queries will fire regardless of network connection status
+      - `'offlineFirst'` - Queries will fire immediately, but if they fail due to network, they will be paused and retried when the connection is restored
+    </ParamField>
+
+    <ParamField path="retryOnMount" type="boolean" default="true">
+      If set to `false`, the query will not be retried on mount if it contains an error.
+    </ParamField>
+
+    <ParamField path="notifyOnChangeProps" type="Array<keyof UseQueryResult> | 'all'">
+      If set, the component will only re-render if any of the listed properties change. When set to `'all'`, the component will re-render whenever the query is updated.
+      
+      ```typescript
+      notifyOnChangeProps: ['data', 'error']
+      ```
+    </ParamField>
+
+    <ParamField path="meta" type="Record<string, unknown>">
+      Optional metadata that can be used in other places like the global query cache callbacks.
+      
+      ```typescript
+      meta: { loggingContext: 'todos' }
+      ```
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="queryClient" type="QueryClient">
+  Use this to override the default QueryClient.
+</ParamField>
+
+## Returns
+
+<ResponseField name="UseQueryResult<TData, TError>" type="object">
+  The query result object.
+
+  <Expandable title="properties">
+    <ResponseField name="data" type="TData | undefined">
+      The last successfully resolved data for the query.
+    </ResponseField>
+
+    <ResponseField name="error" type="TError | null">
+      The error object for the query, if an error was thrown. Defaults to `null`.
+    </ResponseField>
+
+    <ResponseField name="status" type="'pending' | 'error' | 'success'">
+      - `'pending'` - No cached data and no query attempt was finished yet
+      - `'error'` - The query attempt resulted in an error
+      - `'success'` - The query has received a response with no errors
+    </ResponseField>
+
+    <ResponseField name="fetchStatus" type="'fetching' | 'paused' | 'idle'">
+      - `'fetching'` - The queryFn is executing (initial pending or background refetch)
+      - `'paused'` - The query wanted to fetch, but has been paused
+      - `'idle'` - The query is not fetching
+    </ResponseField>
+
+    <ResponseField name="isPending" type="boolean">
+      `true` if there's no cached data and no query attempt was finished yet.
+    </ResponseField>
+
+    <ResponseField name="isLoading" type="boolean">
+      `true` whenever the first fetch for a query is in-flight. Same as `isFetching && isPending`.
+    </ResponseField>
+
+    <ResponseField name="isFetching" type="boolean">
+      `true` whenever the queryFn is executing, including initial pending and background refetches.
+    </ResponseField>
+
+    <ResponseField name="isSuccess" type="boolean">
+      `true` if the query has received a response with no errors and is ready to display its data.
+    </ResponseField>
+
+    <ResponseField name="isError" type="boolean">
+      `true` if the query attempt resulted in an error.
+    </ResponseField>
+
+    <ResponseField name="isRefetching" type="boolean">
+      `true` whenever a background refetch is in-flight (does not include initial pending). Same as `isFetching && !isPending`.
+    </ResponseField>
+
+    <ResponseField name="isStale" type="boolean">
+      `true` if the data in the cache is invalidated or if the data is older than the given `staleTime`.
+    </ResponseField>
+
+    <ResponseField name="isPlaceholderData" type="boolean">
+      `true` if the data shown is placeholder data.
+    </ResponseField>
+
+    <ResponseField name="isLoadingError" type="boolean">
+      `true` if the query failed while fetching for the first time.
+    </ResponseField>
+
+    <ResponseField name="isRefetchError" type="boolean">
+      `true` if the query failed while refetching.
+    </ResponseField>
+
+    <ResponseField name="dataUpdatedAt" type="number">
+      The timestamp for when the query most recently returned the `status` as `'success'`.
+    </ResponseField>
+
+    <ResponseField name="errorUpdatedAt" type="number">
+      The timestamp for when the query most recently returned the `status` as `'error'`.
+    </ResponseField>
+
+    <ResponseField name="failureCount" type="number">
+      The failure count for the query. Incremented every time the query fails. Reset to `0` when the query succeeds.
+    </ResponseField>
+
+    <ResponseField name="failureReason" type="TError | null">
+      The failure reason for the query retry. Reset to `null` when the query succeeds.
+    </ResponseField>
+
+    <ResponseField name="refetch" type="(options?: RefetchOptions) => Promise<UseQueryResult>">
+      A function to manually refetch the query.
+      
+      ```typescript
+      refetch({ cancelRefetch: true })
+      ```
+    </ResponseField>
+
+    <ResponseField name="promise" type="Promise<TData>">
+      A stable promise that will resolve with the data of the query. Requires `experimental_prefetchInRender` to be enabled.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Examples
+
+### Basic Usage
+
+```typescript
+import { useQuery } from '@tanstack/react-query'
+
+function Todos() {
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['todos'],
+    queryFn: async () => {
+      const response = await fetch('/api/todos')
+      if (!response.ok) throw new Error('Network response was not ok')
+      return response.json()
+    },
+  })
+
+  if (isLoading) return <div>Loading...</div>
+  if (error) return <div>Error: {error.message}</div>
+
+  return (
+    <ul>
+      {data.map(todo => (
+        <li key={todo.id}>{todo.title}</li>
+      ))}
+    </ul>
+  )
+}
+```
+
+### With Query Key Variables
+
+```typescript
+function Todo({ todoId }: { todoId: number }) {
+  const { data } = useQuery({
+    queryKey: ['todo', todoId],
+    queryFn: async ({ queryKey }) => {
+      const [, id] = queryKey
+      const response = await fetch(`/api/todos/${id}`)
+      return response.json()
+    },
+  })
+
+  return <div>{data?.title}</div>
+}
+```
+
+### Dependent Query
+
+```typescript
+function UserProjects({ userId }: { userId: number | null }) {
+  const { data } = useQuery({
+    queryKey: ['projects', userId],
+    queryFn: ({ queryKey }) => fetchProjects(queryKey[1]),
+    enabled: !!userId, // Only run when userId is available
+  })
+
+  // ...
+}
+```
+
+### With Select Transform
+
+```typescript
+const { data } = useQuery({
+  queryKey: ['todos'],
+  queryFn: fetchTodos,
+  select: data => data.filter(todo => todo.completed),
+})
+```
+
+### With Type Safety
+
+```typescript
+interface Todo {
+  id: number
+  title: string
+  completed: boolean
+}
+
+const { data } = useQuery<Todo[], Error>({
+  queryKey: ['todos'],
+  queryFn: fetchTodos,
+})
+// data is typed as Todo[] | undefined
+// error is typed as Error | null
+```
+
+## Notes
+
+<Note>
+  The query will automatically execute when the component mounts and whenever the `queryKey` changes, unless `enabled` is set to `false`.
+</Note>
+
+<Note>
+  If `initialData` is provided, the query will return `status: 'success'` immediately and `data` will be defined.
+</Note>
+
+<Note>
+  For queries with `suspense: true`, use `useSuspenseQuery` instead for better type safety.
+</Note>

@@ -1,0 +1,656 @@
+---
+title: Quick Start Guide
+description: Get started with Angular Query in minutes
+---
+
+This guide will help you build your first Angular Query application. You'll learn how to fetch data, handle loading states, and perform mutations.
+
+## What You'll Build
+
+We'll create a simple blog post viewer with:
+- Fetching and displaying a list of posts
+- Loading and error states
+- Creating new posts with mutations
+- Automatic cache updates
+
+## Prerequisites
+
+Make sure you've completed the [installation](/frameworks/angular/installation) steps:
+- Installed `@tanstack/angular-query-experimental`
+- Configured `provideTanStackQuery` in your app
+
+## Step 1: Create a Data Service
+
+First, let's create a service to fetch data. We'll use Angular's `HttpClient`:
+
+<Steps>
+
+### Create the service
+
+```typescript services/posts.service.ts
+import { Injectable, inject } from '@angular/core'
+import { HttpClient } from '@angular/common/http'
+import { lastValueFrom } from 'rxjs'
+
+export interface Post {
+  id: number
+  title: string
+  body: string
+  userId: number
+}
+
+@Injectable({
+  providedIn: 'root'
+})
+export class PostsService {
+  #http = inject(HttpClient)
+  readonly #baseUrl = 'https://jsonplaceholder.typicode.com'
+
+  async getPosts(): Promise<Post[]> {
+    return lastValueFrom(
+      this.#http.get<Post[]>(`${this.#baseUrl}/posts`)
+    )
+  }
+
+  async getPost(id: number): Promise<Post> {
+    return lastValueFrom(
+      this.#http.get<Post>(`${this.#baseUrl}/posts/${id}`)
+    )
+  }
+
+  async createPost(post: Omit<Post, 'id'>): Promise<Post> {
+    return lastValueFrom(
+      this.#http.post<Post>(`${this.#baseUrl}/posts`, post)
+    )
+  }
+}
+```
+
+<Note>
+We're using `lastValueFrom` to convert RxJS observables to promises, which Angular Query expects. You can also use observables directly with additional setup.
+</Note>
+
+### Add HttpClient provider
+
+Ensure `provideHttpClient` is in your app config:
+
+```typescript main.ts
+import { bootstrapApplication } from '@angular/platform-browser'
+import { provideHttpClient } from '@angular/common/http'
+import { 
+  provideTanStackQuery,
+  QueryClient 
+} from '@tanstack/angular-query-experimental'
+import { AppComponent } from './app/app.component'
+
+bootstrapApplication(AppComponent, {
+  providers: [
+    provideHttpClient(),
+    provideTanStackQuery(new QueryClient())
+  ]
+})
+```
+
+</Steps>
+
+## Step 2: Fetch and Display Posts
+
+Now let's create a component that fetches and displays posts:
+
+```typescript components/posts-list.component.ts
+import { Component, inject } from '@angular/core'
+import { CommonModule } from '@angular/common'
+import { injectQuery } from '@tanstack/angular-query-experimental'
+import { PostsService } from '../services/posts.service'
+
+@Component({
+  selector: 'app-posts-list',
+  standalone: true,
+  imports: [CommonModule],
+  template: `
+    <div class="posts-container">
+      <h1>Blog Posts</h1>
+      
+      @if (postsQuery.isPending()) {
+        <div class="loading">
+          <p>Loading posts...</p>
+        </div>
+      }
+      
+      @if (postsQuery.isError()) {
+        <div class="error">
+          <p>Error: {{ postsQuery.error()?.message }}</p>
+          <button (click)="postsQuery.refetch()">Retry</button>
+        </div>
+      }
+      
+      @if (postsQuery.isSuccess()) {
+        <div class="posts-list">
+          @for (post of postsQuery.data(); track post.id) {
+            <article class="post-card">
+              <h2>{{ post.title }}</h2>
+              <p>{{ post.body }}</p>
+              <small>Post ID: {{ post.id }}</small>
+            </article>
+          }
+        </div>
+      }
+      
+      @if (postsQuery.isFetching()) {
+        <p class="fetching-indicator">Updating...</p>
+      }
+    </div>
+  `,
+  styles: [`
+    .posts-container {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 2rem;
+    }
+    
+    .post-card {
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 1.5rem;
+      margin-bottom: 1rem;
+    }
+    
+    .post-card h2 {
+      margin-top: 0;
+      color: #333;
+    }
+    
+    .error {
+      color: red;
+      padding: 1rem;
+      border: 1px solid red;
+      border-radius: 4px;
+    }
+    
+    .loading {
+      text-align: center;
+      padding: 2rem;
+    }
+    
+    .fetching-indicator {
+      text-align: center;
+      color: #666;
+      font-style: italic;
+    }
+  `]
+})
+export class PostsListComponent {
+  #postsService = inject(PostsService)
+  
+  postsQuery = injectQuery(() => ({
+    queryKey: ['posts'],
+    queryFn: () => this.#postsService.getPosts()
+  }))
+}
+```
+
+### Understanding the Code
+
+<Tabs>
+  <Tab title="Query Setup">
+
+```typescript
+postsQuery = injectQuery(() => ({
+  queryKey: ['posts'],
+  queryFn: () => this.#postsService.getPosts()
+}))
+```
+
+**Key concepts:**
+
+- `queryKey`: A unique identifier for this query. Used for caching and refetching.
+- `queryFn`: An async function that fetches the data.
+- `injectQuery`: Returns a signal-based object with query state and data.
+
+</Tab>
+  <Tab title="Query State">
+
+The query object exposes several state signals:
+
+- `isPending()`: `true` when the query is loading for the first time
+- `isError()`: `true` if the query failed
+- `isSuccess()`: `true` if the query succeeded
+- `isFetching()`: `true` when fetching (including background refetches)
+- `data()`: The query result data
+- `error()`: The error object if the query failed
+- `refetch()`: Function to manually refetch
+
+</Tab>
+  <Tab title="Template">
+
+Using Angular's new control flow syntax:
+
+```angular-html
+@if (postsQuery.isPending()) {
+  <p>Loading...</p>
+}
+@if (postsQuery.isSuccess()) {
+  @for (post of postsQuery.data(); track post.id) {
+    <div>{{ post.title }}</div>
+  }
+}
+```
+
+All query state is accessed as signals with the `()` syntax.
+
+</Tab>
+</Tabs>
+
+## Step 3: Add a Single Post View
+
+Let's create a component to view a single post with reactive parameters:
+
+```typescript components/post-detail.component.ts
+import { Component, inject, input, numberAttribute } from '@angular/core'
+import { CommonModule } from '@angular/common'
+import { injectQuery } from '@tanstack/angular-query-experimental'
+import { PostsService } from '../services/posts.service'
+
+@Component({
+  selector: 'app-post-detail',
+  standalone: true,
+  imports: [CommonModule],
+  template: `
+    <div class="post-detail">
+      <button (click)="goBack()">← Back</button>
+      
+      @if (postQuery.isPending()) {
+        <p>Loading post...</p>
+      }
+      
+      @if (postQuery.isSuccess()) {
+        <article>
+          <h1>{{ postQuery.data()?.title }}</h1>
+          <p>{{ postQuery.data()?.body }}</p>
+          <small>Post ID: {{ postQuery.data()?.id }}</small>
+        </article>
+      }
+      
+      @if (postQuery.isError()) {
+        <p class="error">Failed to load post</p>
+      }
+    </div>
+  `,
+  styles: [`
+    .post-detail {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 2rem;
+    }
+    
+    article {
+      margin-top: 2rem;
+    }
+  `]
+})
+export class PostDetailComponent {
+  #postsService = inject(PostsService)
+  
+  // Input signal from router or parent component
+  postId = input.required({ transform: numberAttribute })
+  
+  // Query automatically refetches when postId changes
+  postQuery = injectQuery(() => ({
+    queryKey: ['posts', this.postId()],
+    queryFn: () => this.#postsService.getPost(this.postId())
+  }))
+  
+  goBack() {
+    history.back()
+  }
+}
+```
+
+<Tip>
+The query function runs in a reactive context. When `postId()` changes, Angular Query automatically detects the change and refetches with the new ID.
+</Tip>
+
+## Step 4: Create Posts with Mutations
+
+Now let's add the ability to create new posts:
+
+```typescript components/create-post.component.ts
+import { Component, inject, signal } from '@angular/core'
+import { CommonModule } from '@angular/common'
+import { FormsModule } from '@angular/forms'
+import { 
+  injectMutation,
+  injectQueryClient 
+} from '@tanstack/angular-query-experimental'
+import { PostsService, Post } from '../services/posts.service'
+
+@Component({
+  selector: 'app-create-post',
+  standalone: true,
+  imports: [CommonModule, FormsModule],
+  template: `
+    <div class="create-post">
+      <h2>Create New Post</h2>
+      
+      <form (submit)="handleSubmit($event)">
+        <div class="form-group">
+          <label for="title">Title</label>
+          <input
+            id="title"
+            [(ngModel)]="title"
+            name="title"
+            required
+            placeholder="Enter post title"
+          />
+        </div>
+        
+        <div class="form-group">
+          <label for="body">Body</label>
+          <textarea
+            id="body"
+            [(ngModel)]="body"
+            name="body"
+            required
+            rows="5"
+            placeholder="Enter post content"
+          ></textarea>
+        </div>
+        
+        <button 
+          type="submit" 
+          [disabled]="createPostMutation.isPending()"
+        >
+          {{ createPostMutation.isPending() ? 'Creating...' : 'Create Post' }}
+        </button>
+      </form>
+      
+      @if (createPostMutation.isError()) {
+        <div class="error">
+          <p>Error: {{ createPostMutation.error()?.message }}</p>
+        </div>
+      }
+      
+      @if (createPostMutation.isSuccess()) {
+        <div class="success">
+          <p>Post created successfully!</p>
+          <button (click)="resetForm()">Create Another</button>
+        </div>
+      }
+    </div>
+  `,
+  styles: [`
+    .create-post {
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 2rem;
+    }
+    
+    .form-group {
+      margin-bottom: 1rem;
+    }
+    
+    label {
+      display: block;
+      margin-bottom: 0.5rem;
+      font-weight: bold;
+    }
+    
+    input, textarea {
+      width: 100%;
+      padding: 0.5rem;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+    }
+    
+    button {
+      background: #007bff;
+      color: white;
+      padding: 0.75rem 1.5rem;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    
+    button:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
+    
+    .success {
+      color: green;
+      padding: 1rem;
+      border: 1px solid green;
+      border-radius: 4px;
+      margin-top: 1rem;
+    }
+  `]
+})
+export class CreatePostComponent {
+  #postsService = inject(PostsService)
+  #queryClient = injectQueryClient()
+  
+  title = signal('')
+  body = signal('')
+  
+  createPostMutation = injectMutation(() => ({
+    mutationFn: (newPost: Omit<Post, 'id'>) => 
+      this.#postsService.createPost(newPost),
+    onSuccess: () => {
+      // Invalidate posts query to refetch the list
+      this.#queryClient.invalidateQueries({ queryKey: ['posts'] })
+      // Reset form
+      this.resetForm()
+    }
+  }))
+  
+  handleSubmit(event: Event) {
+    event.preventDefault()
+    
+    this.createPostMutation.mutate({
+      title: this.title(),
+      body: this.body(),
+      userId: 1
+    })
+  }
+  
+  resetForm() {
+    this.title.set('')
+    this.body.set('')
+    this.createPostMutation.reset()
+  }
+}
+```
+
+### Understanding Mutations
+
+<Tabs>
+  <Tab title="Mutation Setup">
+
+```typescript
+createPostMutation = injectMutation(() => ({
+  mutationFn: (newPost) => this.#postsService.createPost(newPost),
+  onSuccess: () => {
+    this.#queryClient.invalidateQueries({ queryKey: ['posts'] })
+  }
+}))
+```
+
+- `mutationFn`: The function that performs the mutation
+- `onSuccess`: Callback called when mutation succeeds
+- `invalidateQueries`: Marks queries as stale to trigger refetch
+
+</Tab>
+  <Tab title="Mutation State">
+
+Mutation signals available:
+
+- `isPending()`: `true` while mutation is in progress
+- `isSuccess()`: `true` if mutation succeeded
+- `isError()`: `true` if mutation failed
+- `isIdle()`: `true` when mutation hasn't been called
+- `data()`: The mutation result
+- `error()`: The error if mutation failed
+- `mutate()`: Function to trigger the mutation
+- `mutateAsync()`: Promise-based version of mutate
+- `reset()`: Reset mutation state
+
+</Tab>
+  <Tab title="Cache Updates">
+
+After creating a post, we invalidate the posts query:
+
+```typescript
+onSuccess: () => {
+  this.#queryClient.invalidateQueries({ queryKey: ['posts'] })
+}
+```
+
+This marks the `['posts']` query as stale, causing it to refetch automatically and show the new post.
+
+</Tab>
+</Tabs>
+
+## Step 5: Put It All Together
+
+Create a main app component that uses all the pieces:
+
+```typescript app.component.ts
+import { Component, signal } from '@angular/core'
+import { PostsListComponent } from './components/posts-list.component'
+import { CreatePostComponent } from './components/create-post.component'
+
+@Component({
+  selector: 'app-root',
+  standalone: true,
+  imports: [PostsListComponent, CreatePostComponent],
+  template: `
+    <div class="app">
+      <header>
+        <h1>Angular Query Blog</h1>
+        <button (click)="toggleView()">
+          {{ showCreateForm() ? 'View Posts' : 'Create Post' }}
+        </button>
+      </header>
+      
+      <main>
+        @if (showCreateForm()) {
+          <app-create-post />
+        } @else {
+          <app-posts-list />
+        }
+      </main>
+    </div>
+  `,
+  styles: [`
+    .app {
+      min-height: 100vh;
+      background: #f5f5f5;
+    }
+    
+    header {
+      background: white;
+      padding: 1rem 2rem;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    
+    header h1 {
+      margin: 0;
+    }
+  `]
+})
+export class AppComponent {
+  showCreateForm = signal(false)
+  
+  toggleView() {
+    this.showCreateForm.update(v => !v)
+  }
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Queries Guide" icon="database" href="/frameworks/angular/guides/queries">
+    Learn advanced query patterns
+  </Card>
+  <Card title="Mutations Guide" icon="pen" href="/frameworks/angular/guides/mutations">
+    Master mutations and optimistic updates
+  </Card>
+  <Card title="DevTools" icon="wrench" href="/frameworks/angular/devtools">
+    Debug your queries visually
+  </Card>
+  <Card title="API Reference" icon="book" href="/frameworks/angular/reference/injectQuery">
+    Explore the complete API
+  </Card>
+</CardGroup>
+
+## Common Patterns
+
+### Dependent Queries
+
+Fetch data that depends on other data:
+
+```typescript
+user = injectQuery(() => ({
+  queryKey: ['user'],
+  queryFn: () => fetchUser()
+}))
+
+userPosts = injectQuery(() => ({
+  queryKey: ['posts', 'user', this.user.data()?.id],
+  queryFn: () => fetchUserPosts(this.user.data()!.id),
+  enabled: !!this.user.data()?.id // Only run when we have a user ID
+}))
+```
+
+### Optimistic Updates
+
+Update UI immediately before server responds:
+
+```typescript
+updatePostMutation = injectMutation(() => ({
+  mutationFn: (updatedPost: Post) => this.api.updatePost(updatedPost),
+  onMutate: async (updatedPost) => {
+    // Cancel outgoing refetches
+    await this.queryClient.cancelQueries({ queryKey: ['posts', updatedPost.id] })
+    
+    // Snapshot previous value
+    const previous = this.queryClient.getQueryData(['posts', updatedPost.id])
+    
+    // Optimistically update
+    this.queryClient.setQueryData(['posts', updatedPost.id], updatedPost)
+    
+    return { previous }
+  },
+  onError: (err, variables, context) => {
+    // Rollback on error
+    this.queryClient.setQueryData(
+      ['posts', variables.id],
+      context?.previous
+    )
+  }
+}))
+```
+
+### Pagination
+
+```typescript
+page = signal(1)
+
+postsQuery = injectQuery(() => ({
+  queryKey: ['posts', { page: this.page() }],
+  queryFn: () => fetchPosts(this.page()),
+  keepPreviousData: true // Keep showing old data while fetching new page
+}))
+
+nextPage() {
+  this.page.update(p => p + 1)
+}
+
+previousPage() {
+  this.page.update(p => Math.max(1, p - 1))
+}
+```

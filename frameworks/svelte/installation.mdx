@@ -1,0 +1,333 @@
+---
+title: Installation
+description: Install and set up TanStack Query for Svelte 5 applications
+---
+
+Get started with Svelte Query by installing the package and setting up your application.
+
+## Requirements
+
+Svelte Query requires:
+
+- **Svelte 5.25.0 or higher** - Uses modern Svelte 5 runes (`$state`, `$derived`, `$effect`)
+- **TypeScript 4.7+** (recommended) - For full type safety
+- **Node.js 18+** - For development
+
+<Warning>
+  Svelte Query is built specifically for Svelte 5 and uses runes. It will not work with Svelte 3 or 4. For older versions of Svelte, use a different data fetching solution.
+</Warning>
+
+## Installation
+
+<Steps>
+  <Step title="Install the package">
+    Install `@tanstack/svelte-query` using your preferred package manager:
+
+    <CodeGroup>
+      ```bash npm
+      npm install @tanstack/svelte-query
+      ```
+
+      ```bash pnpm
+      pnpm add @tanstack/svelte-query
+      ```
+
+      ```bash yarn
+      yarn add @tanstack/svelte-query
+      ```
+
+      ```bash bun
+      bun add @tanstack/svelte-query
+      ```
+    </CodeGroup>
+
+    This will install `@tanstack/svelte-query` version `6.0.18` or higher, which includes:
+    - Core query functionality
+    - TypeScript type definitions
+    - Svelte 5 rune-based reactivity
+  </Step>
+
+  <Step title="Set up the QueryClientProvider">
+    Create a `QueryClient` and wrap your application with `QueryClientProvider` in your root layout:
+
+    ```svelte +layout.svelte
+    <script lang="ts">
+    import { QueryClient, QueryClientProvider } from '@tanstack/svelte-query'
+
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: {
+          staleTime: 60 * 1000, // 1 minute
+        },
+      },
+    })
+
+    const { children } = $props()
+    </script>
+
+    <QueryClientProvider client={queryClient}>
+      {@render children()}
+    </QueryClientProvider>
+    ```
+
+    <Note>
+      In SvelteKit applications, place this in your root `+layout.svelte` file to make the QueryClient available throughout your app.
+    </Note>
+  </Step>
+
+  <Step title="Start using queries">
+    You can now use Svelte Query hooks in any component:
+
+    ```svelte +page.svelte
+    <script lang="ts">
+    import { createQuery } from '@tanstack/svelte-query'
+
+    const query = createQuery(() => ({
+      queryKey: ['todos'],
+      queryFn: async () => {
+        const response = await fetch('/api/todos')
+        return response.json()
+      },
+    }))
+    </script>
+
+    {#if query.isPending}
+      <p>Loading...</p>
+    {:else if query.isError}
+      <p>Error: {query.error.message}</p>
+    {:else}
+      <ul>
+        {#each query.data as todo}
+          <li>{todo.title}</li>
+        {/each}
+      </ul>
+    {/if}
+    ```
+  </Step>
+</Steps>
+
+## Configuration Options
+
+The `QueryClient` accepts various configuration options to customize its behavior:
+
+```typescript
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      // How long data stays fresh (ms)
+      staleTime: 60 * 1000,
+      
+      // How long inactive data stays in cache (ms)
+      gcTime: 5 * 60 * 1000,
+      
+      // Retry failed requests
+      retry: 3,
+      
+      // Refetch on window focus
+      refetchOnWindowFocus: true,
+      
+      // Refetch on component mount
+      refetchOnMount: true,
+      
+      // Refetch on network reconnect
+      refetchOnReconnect: true,
+    },
+    mutations: {
+      // Retry failed mutations
+      retry: 1,
+    },
+  },
+})
+```
+
+### Common Configuration Patterns
+
+<CodeGroup>
+  ```typescript Conservative (Less Refetching)
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        staleTime: 10 * 60 * 1000, // 10 minutes
+        gcTime: 15 * 60 * 1000,    // 15 minutes
+        refetchOnWindowFocus: false,
+        retry: 1,
+      },
+    },
+  })
+  ```
+
+  ```typescript Aggressive (Always Fresh)
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        staleTime: 0,
+        gcTime: 5 * 60 * 1000,
+        refetchOnWindowFocus: true,
+        refetchOnMount: true,
+        retry: 3,
+      },
+    },
+  })
+  ```
+
+  ```typescript Development (Fast Feedback)
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        staleTime: 0,
+        retry: false,
+        refetchOnWindowFocus: false,
+      },
+    },
+  })
+  ```
+</CodeGroup>
+
+## SvelteKit Integration
+
+For SvelteKit applications, you may want to handle browser-specific features:
+
+```svelte +layout.svelte
+<script lang="ts">
+import { browser } from '$app/environment'
+import { QueryClient, QueryClientProvider } from '@tanstack/svelte-query'
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      // Only run queries in the browser
+      enabled: browser,
+      staleTime: 60 * 1000,
+    },
+  },
+})
+
+const { children } = $props()
+</script>
+
+<QueryClientProvider client={queryClient}>
+  {@render children()}
+</QueryClientProvider>
+```
+
+<Tip>
+  Setting `enabled: browser` prevents queries from running during server-side rendering, which is useful for client-only data fetching.
+</Tip>
+
+## Optional: Install DevTools
+
+For development, install the Svelte Query DevTools to visualize and debug your queries:
+
+<CodeGroup>
+  ```bash npm
+  npm install -D @tanstack/svelte-query-devtools
+  ```
+
+  ```bash pnpm
+  pnpm add -D @tanstack/svelte-query-devtools
+  ```
+
+  ```bash yarn
+  yarn add -D @tanstack/svelte-query-devtools
+  ```
+
+  ```bash bun
+  bun add -D @tanstack/svelte-query-devtools
+  ```
+</CodeGroup>
+
+Then add it to your layout:
+
+```svelte +layout.svelte
+<script lang="ts">
+import { QueryClient, QueryClientProvider } from '@tanstack/svelte-query'
+import { SvelteQueryDevtools } from '@tanstack/svelte-query-devtools'
+
+const queryClient = new QueryClient()
+const { children } = $props()
+</script>
+
+<QueryClientProvider client={queryClient}>
+  {@render children()}
+  <SvelteQueryDevtools />
+</QueryClientProvider>
+```
+
+<Note>
+  The DevTools only render in development mode and are automatically tree-shaken from production builds.
+</Note>
+
+## Package Dependencies
+
+Svelte Query has a minimal dependency footprint:
+
+```json package.json
+{
+  "dependencies": {
+    "@tanstack/query-core": "workspace:*"
+  },
+  "peerDependencies": {
+    "svelte": "^5.25.0"
+  }
+}
+```
+
+- `@tanstack/query-core` - Framework-agnostic core query logic
+- `svelte` - Required peer dependency (version 5.25.0+)
+
+## Troubleshooting
+
+### Error: "Svelte version 5.25.0 or higher is required"
+
+Ensure you have Svelte 5.25.0+ installed:
+
+```bash
+npm install svelte@latest
+```
+
+### Error: "Cannot find QueryClient in context"
+
+Make sure you've wrapped your app with `QueryClientProvider`:
+
+```svelte
+<QueryClientProvider client={queryClient}>
+  <!-- Your app here -->
+</QueryClientProvider>
+```
+
+### TypeScript errors with runes
+
+Ensure your `tsconfig.json` is configured for Svelte 5:
+
+```json tsconfig.json
+{
+  "extends": "./.svelte-kit/tsconfig.json",
+  "compilerOptions": {
+    "strict": true,
+    "module": "ESNext",
+    "target": "ESNext"
+  }
+}
+```
+
+## Next Steps
+
+<Steps>
+  <Step title="Quick Start Guide">
+    Learn the basics with a step-by-step tutorial.
+    
+    [Quick Start →](/frameworks/svelte/quick-start)
+  </Step>
+  
+  <Step title="TypeScript Configuration">
+    Set up TypeScript for maximum type safety.
+    
+    [TypeScript Guide →](/frameworks/svelte/typescript)
+  </Step>
+  
+  <Step title="Configure DevTools">
+    Learn how to use the Svelte Query DevTools.
+    
+    [DevTools Setup →](/frameworks/svelte/devtools)
+  </Step>
+</Steps>

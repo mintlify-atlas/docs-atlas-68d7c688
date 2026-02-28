@@ -1,0 +1,225 @@
+---
+title: onlineManager
+description: API reference for the onlineManager singleton
+---
+
+The `onlineManager` is a singleton that manages network connectivity state and notifies subscribers when the online state changes. It listens to the browser's `online` and `offline` events by default and can be customized with custom event listeners.
+
+## Import
+
+```typescript
+import { onlineManager } from '@tanstack/query-core'
+```
+
+## Methods
+
+### subscribe
+
+Subscribe to online state changes.
+
+```typescript
+subscribe(listener: (online: boolean) => void): () => void
+```
+
+<ParamField path="listener" type="(online: boolean) => void" required>
+  Callback function that will be called when the online state changes. Receives a boolean indicating whether the network is online.
+</ParamField>
+
+<ResponseField name="return" type="() => void">
+  Returns an unsubscribe function that removes the listener when called.
+</ResponseField>
+
+#### Example
+
+```typescript
+const unsubscribe = onlineManager.subscribe((isOnline) => {
+  console.log('Network is', isOnline ? 'online' : 'offline')
+})
+
+// Later, unsubscribe
+unsubscribe()
+```
+
+### setEventListener
+
+Set a custom event listener for online state changes. This allows you to customize how network connectivity is detected.
+
+```typescript
+setEventListener(setup: SetupFn): void
+```
+
+<ParamField path="setup" type="SetupFn" required>
+  A setup function that receives a `setOnline` callback and returns an optional cleanup function.
+  
+  **Type signature:**
+  ```typescript
+  type SetupFn = (
+    setOnline: (online: boolean) => void
+  ) => (() => void) | undefined
+  ```
+</ParamField>
+
+<Note>
+  The setup function should call `setOnline(true)` when the network comes online and `setOnline(false)` when it goes offline.
+</Note>
+
+#### Example
+
+```typescript
+// Custom online detection for React Native
+import NetInfo from '@react-native-community/netinfo'
+
+onlineManager.setEventListener((setOnline) => {
+  return NetInfo.addEventListener((state) => {
+    setOnline(state.isConnected ?? false)
+  })
+})
+```
+
+### setOnline
+
+Manually set the online state.
+
+```typescript
+setOnline(online: boolean): void
+```
+
+<ParamField path="online" type="boolean" required>
+  The new online state. Pass `true` to indicate the network is online, `false` to indicate it's offline.
+</ParamField>
+
+#### Example
+
+```typescript
+// Manually set the network as online
+onlineManager.setOnline(true)
+
+// Manually set the network as offline
+onlineManager.setOnline(false)
+```
+
+### isOnline
+
+Get the current online state.
+
+```typescript
+isOnline(): boolean
+```
+
+<ResponseField name="return" type="boolean">
+  Returns `true` if the network is online, `false` otherwise.
+</ResponseField>
+
+#### Example
+
+```typescript
+if (onlineManager.isOnline()) {
+  console.log('Network is currently online')
+}
+```
+
+## Default Behavior
+
+By default, the `onlineManager` listens to the browser's `online` and `offline` events to detect network connectivity changes. The manager starts with the assumption that the network is online (`true`).
+
+In environments where `window.addEventListener` is not available (like React Native), you need to set up a custom event listener using `setEventListener`.
+
+## Use Cases
+
+### Custom Online Detection
+
+You can provide custom online detection logic for different environments:
+
+```typescript
+import { onlineManager } from '@tanstack/query-core'
+import NetInfo from '@react-native-community/netinfo'
+
+// React Native example
+onlineManager.setEventListener((setOnline) => {
+  return NetInfo.addEventListener((state) => {
+    setOnline(state.isConnected ?? false)
+  })
+})
+```
+
+### Disable Automatic Online Refetching
+
+You can prevent automatic refetching when the network reconnects:
+
+```typescript
+// Disable online detection by always returning true
+onlineManager.setEventListener(() => {
+  return () => {}
+})
+onlineManager.setOnline(true)
+```
+
+### Advanced Online Detection
+
+You can implement more sophisticated online detection:
+
+```typescript
+import { onlineManager } from '@tanstack/query-core'
+
+// Ping a server to verify actual connectivity
+onlineManager.setEventListener((setOnline) => {
+  const checkOnline = async () => {
+    try {
+      await fetch('/api/health')
+      setOnline(true)
+    } catch {
+      setOnline(false)
+    }
+  }
+
+  // Check immediately
+  checkOnline()
+
+  // Check every 30 seconds
+  const interval = setInterval(checkOnline, 30000)
+
+  // Also listen to browser events
+  const onlineListener = () => setOnline(true)
+  const offlineListener = () => setOnline(false)
+  window.addEventListener('online', onlineListener)
+  window.addEventListener('offline', offlineListener)
+
+  return () => {
+    clearInterval(interval)
+    window.removeEventListener('online', onlineListener)
+    window.removeEventListener('offline', offlineListener)
+  }
+})
+```
+
+### Testing
+
+In tests, you can control the online state manually:
+
+```typescript
+import { onlineManager } from '@tanstack/query-core'
+
+test('should refetch when coming back online', () => {
+  // Simulate going offline
+  onlineManager.setOnline(false)
+  
+  // Simulate coming back online
+  onlineManager.setOnline(true)
+})
+```
+
+### Responding to Network Changes
+
+You can subscribe to network changes to update your UI or trigger custom logic:
+
+```typescript
+import { onlineManager } from '@tanstack/query-core'
+
+const unsubscribe = onlineManager.subscribe((isOnline) => {
+  if (isOnline) {
+    showNotification('You are back online!')
+  } else {
+    showNotification('You are offline. Some features may not work.')
+  }
+})
+```

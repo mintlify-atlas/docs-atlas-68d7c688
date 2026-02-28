@@ -1,0 +1,233 @@
+---
+title: ESLint Plugin Query
+description: Enforce best practices and avoid common mistakes with the official TanStack Query ESLint plugin
+---
+
+TanStack Query comes with its own ESLint plugin. This plugin is used to enforce best practices and to help you avoid common mistakes when using the library.
+
+## Installation
+
+The plugin is a separate package that you need to install:
+
+<CodeGroup>
+```bash npm
+npm i -D @tanstack/eslint-plugin-query
+```
+
+```bash pnpm
+pnpm add -D @tanstack/eslint-plugin-query
+```
+
+```bash yarn
+yarn add -D @tanstack/eslint-plugin-query
+```
+
+```bash bun
+bun add -D @tanstack/eslint-plugin-query
+```
+</CodeGroup>
+
+## Flat Config (`eslint.config.js`)
+
+### Recommended Setup
+
+To enable all of the recommended rules for our plugin, add the following config:
+
+```javascript eslint.config.js
+import pluginQuery from '@tanstack/eslint-plugin-query'
+
+export default [
+  ...pluginQuery.configs['flat/recommended'],
+  // Any other config...
+]
+```
+
+This will enable all recommended rules with sensible defaults.
+
+### Custom Setup
+
+Alternatively, you can load the plugin and configure only the rules you want to use:
+
+```javascript eslint.config.js
+import pluginQuery from '@tanstack/eslint-plugin-query'
+
+export default [
+  {
+    plugins: {
+      '@tanstack/query': pluginQuery,
+    },
+    rules: {
+      '@tanstack/query/exhaustive-deps': 'error',
+      '@tanstack/query/stable-query-client': 'error',
+    },
+  },
+  // Any other config...
+]
+```
+
+## Legacy Config (`.eslintrc`)
+
+### Recommended Setup
+
+To enable all of the recommended rules for our plugin, add `plugin:@tanstack/query/recommended` in extends:
+
+```json .eslintrc
+{
+  "extends": ["plugin:@tanstack/query/recommended"]
+}
+```
+
+### Custom Setup
+
+Alternatively, add `@tanstack/query` to the plugins section, and configure the rules you want to use:
+
+```json .eslintrc
+{
+  "plugins": ["@tanstack/query"],
+  "rules": {
+    "@tanstack/query/exhaustive-deps": "error",
+    "@tanstack/query/stable-query-client": "error"
+  }
+}
+```
+
+## Available Rules
+
+The ESLint plugin includes the following rules:
+
+<CardGroup cols={2}>
+  <Card title="exhaustive-deps" href="./exhaustive-deps" icon="check">
+    Ensures all variables used in queryFn are included in the query key
+  </Card>
+
+  <Card title="no-rest-destructuring" href="#" icon="ban">
+    Prevents rest destructuring in query results to maintain render optimization
+  </Card>
+
+  <Card title="stable-query-client" href="./stable-query-client" icon="database">
+    Ensures QueryClient is created outside of component render
+  </Card>
+
+  <Card title="no-unstable-deps" href="#" icon="exclamation-triangle">
+    Prevents unstable values in query keys that could cause infinite loops
+  </Card>
+
+  <Card title="infinite-query-property-order" href="#" icon="arrows-up-down">
+    Enforces correct property order for infinite queries
+  </Card>
+
+  <Card title="no-void-query-fn" href="#" icon="circle-xmark">
+    Ensures query functions return a value, not void
+  </Card>
+
+  <Card title="mutation-property-order" href="#" icon="list-ol">
+    Enforces consistent property order in mutation options
+  </Card>
+</CardGroup>
+
+## Rule Attributes
+
+Rules may have the following attributes:
+
+- **✅ Recommended**: Enabled in the `recommended` configuration
+- **🔧 Fixable**: Can be automatically fixed with `eslint --fix`
+
+## Why Use the ESLint Plugin?
+
+The ESLint plugin helps you avoid common pitfalls:
+
+### 1. Query Key Consistency
+
+One of the most common mistakes is forgetting to include all variables in the query key:
+
+```typescript
+// ❌ Bad: todoId not in query key
+useQuery({
+  queryKey: ['todos'],
+  queryFn: () => fetchTodo(todoId),
+})
+
+// ✅ Good: all variables in query key
+useQuery({
+  queryKey: ['todos', todoId],
+  queryFn: () => fetchTodo(todoId),
+})
+```
+
+<Warning>
+  Without proper query keys, queries may not be cached independently or refetched when variables change.
+</Warning>
+
+### 2. QueryClient Stability
+
+Creating a new QueryClient on every render is a common mistake:
+
+```typescript
+// ❌ Bad: new client on every render
+function App() {
+  const queryClient = new QueryClient()
+  return <QueryClientProvider client={queryClient}>...</QueryClientProvider>
+}
+
+// ✅ Good: stable client instance
+const queryClient = new QueryClient()
+function App() {
+  return <QueryClientProvider client={queryClient}>...</QueryClientProvider>
+}
+```
+
+### 3. Render Optimization
+
+The plugin helps maintain TanStack Query's smart render optimization by preventing patterns that break it.
+
+## Configuration Tips
+
+<Note>
+  Start with the recommended configuration and adjust rules based on your team's needs. The recommended config represents battle-tested best practices.
+</Note>
+
+### Adjusting Rule Severity
+
+You can adjust the severity of any rule:
+
+```javascript
+rules: {
+  '@tanstack/query/exhaustive-deps': 'warn', // warn instead of error
+  '@tanstack/query/stable-query-client': 'error',
+}
+```
+
+### Disabling Rules
+
+If you need to disable a rule for a specific line:
+
+```typescript
+// eslint-disable-next-line @tanstack/query/exhaustive-deps
+useQuery({
+  queryKey: ['todos'],
+  queryFn: () => fetchTodo(todoId),
+})
+```
+
+<Warning>
+  Only disable rules when you have a good reason. The rules are designed to prevent bugs.
+</Warning>
+
+## Migration from v4
+
+If you're upgrading from TanStack Query v4:
+
+- The `prefer-query-object-syntax` rule has been removed (object syntax is now required)
+- All other rules remain compatible
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Exhaustive Deps Rule" href="./exhaustive-deps" icon="arrow-right">
+    Learn about the exhaustive-deps rule in detail
+  </Card>
+
+  <Card title="Stable Query Client Rule" href="./stable-query-client" icon="arrow-right">
+    Understand the stable-query-client rule
+  </Card>
+</CardGroup>

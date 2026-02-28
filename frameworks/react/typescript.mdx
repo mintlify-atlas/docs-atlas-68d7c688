@@ -1,0 +1,569 @@
+---
+title: TypeScript
+description: Use TanStack Query with TypeScript for type-safe data fetching
+---
+
+# TypeScript
+
+TanStack Query is written in TypeScript and provides excellent type safety out of the box.
+
+## Type Inference
+
+React Query automatically infers types from your query functions:
+
+```tsx
+import { useQuery } from '@tanstack/react-query'
+
+interface Post {
+  id: number
+  title: string
+  body: string
+}
+
+function Posts() {
+  // data is automatically typed as Post[] | undefined
+  const { data } = useQuery({
+    queryKey: ['posts'],
+    queryFn: async (): Promise<Post[]> => {
+      const response = await fetch('/api/posts')
+      return response.json()
+    },
+  })
+
+  return (
+    <ul>
+      {data?.map((post) => (
+        <li key={post.id}>{post.title}</li>
+      ))}
+    </ul>
+  )
+}
+```
+
+<Note>
+  The return type of `queryFn` determines the type of `data`. Add explicit Promise return types to your async functions for better type inference.
+</Note>
+
+## Generic Type Parameters
+
+Explicitly specify types when automatic inference isn't sufficient:
+
+```tsx
+import { useQuery } from '@tanstack/react-query'
+import type { UseQueryResult } from '@tanstack/react-query'
+
+interface Post {
+  id: number
+  title: string
+}
+
+interface ApiError {
+  message: string
+  code: number
+}
+
+// Specify all generic types
+const query: UseQueryResult<Post[], ApiError> = useQuery<
+  Post[],      // TQueryFnData
+  ApiError,    // TError
+  Post[],      // TData
+  string[]     // TQueryKey
+>({
+  queryKey: ['posts'],
+  queryFn: async () => {
+    const response = await fetch('/api/posts')
+    if (!response.ok) {
+      throw { message: 'Failed to fetch', code: response.status }
+    }
+    return response.json()
+  },
+})
+```
+
+### Type Parameters
+
+| Parameter | Description | Default |
+|-----------|-------------|----------|
+| `TQueryFnData` | Type returned by queryFn | `unknown` |
+| `TError` | Type of error thrown | `DefaultError` |
+| `TData` | Type of data property | `TQueryFnData` |
+| `TQueryKey` | Type of queryKey | `QueryKey` |
+
+## Transforming Data
+
+Use the `select` option to transform query data with full type safety:
+
+```tsx
+interface Post {
+  id: number
+  title: string
+  body: string
+  userId: number
+}
+
+interface PostSummary {
+  id: number
+  title: string
+}
+
+function PostTitles() {
+  const { data } = useQuery<Post[], Error, PostSummary[]>({
+    queryKey: ['posts'],
+    queryFn: fetchPosts,
+    select: (posts) => posts.map((post) => ({
+      id: post.id,
+      title: post.title,
+    })),
+  })
+
+  // data is typed as PostSummary[] | undefined
+  return <div>{data?.map(post => post.title).join(', ')}</div>
+}
+```
+
+<Tip>
+  The `select` function is memoized, so transformations only run when the underlying data changes.
+</Tip>
+
+## Query Options Helper
+
+Use `queryOptions` for reusable, type-safe query definitions:
+
+```tsx
+import { queryOptions, useQuery } from '@tanstack/react-query'
+
+interface Post {
+  id: number
+  title: string
+}
+
+// Define reusable query options
+const postQueryOptions = (postId: number) =>
+  queryOptions({
+    queryKey: ['post', postId],
+    queryFn: async (): Promise<Post> => {
+      const response = await fetch(`/api/posts/${postId}`)
+      return response.json()
+    },
+    staleTime: 5000,
+  })
+
+// Use in components with full type inference
+function PostDetails({ postId }: { postId: number }) {
+  const { data } = useQuery(postQueryOptions(postId))
+  return <h1>{data?.title}</h1>
+}
+
+// Also works with queryClient methods
+import { useQueryClient } from '@tanstack/react-query'
+
+function prefetchPost(postId: number) {
+  const queryClient = useQueryClient()
+  queryClient.prefetchQuery(postQueryOptions(postId))
+}
+```
+
+## Mutation Types
+
+Type mutations for safe data updates:
+
+```tsx
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import type { UseMutationResult } from '@tanstack/react-query'
+
+interface Todo {
+  id: number
+  title: string
+  completed: boolean
+}
+
+interface CreateTodoInput {
+  title: string
+}
+
+function CreateTodo() {
+  const queryClient = useQueryClient()
+
+  const mutation: UseMutationResult<
+    Todo,              // TData - returned data type
+    Error,             // TError - error type
+    CreateTodoInput,   // TVariables - mutate function parameters
+    unknown            // TContext - context type for optimistic updates
+  > = useMutation({
+    mutationFn: async (input: CreateTodoInput): Promise<Todo> => {
+      const response = await fetch('/api/todos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+      })
+      return response.json()
+    },
+    onSuccess: (data) => {
+      // data is typed as Todo
+      queryClient.setQueryData<Todo[]>(['todos'], (old) => 
+        old ? [...old, data] : [data]
+      )
+    },
+  })
+
+  return (
+    <button onClick={() => mutation.mutate({ title: 'New Todo' })}>
+      Create
+    </button>
+  )
+}
+```
+
+## Mutation Options Helper
+
+Create reusable mutation configurations:
+
+```tsx
+import { mutationOptions, useMutation } from '@tanstack/react-query'
+
+interface UpdateTodoInput {
+  id: number
+  title?: string
+  completed?: boolean
+}
+
+const updateTodoMutation = mutationOptions({
+  mutationFn: async (input: UpdateTodoInput) => {
+    const response = await fetch(`/api/todos/${input.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    })
+    return response.json()
+  },
+})
+
+function TodoItem({ todo }: { todo: Todo }) {
+  const mutation = useMutation(updateTodoMutation)
+  return <button onClick={() => mutation.mutate({ id: todo.id, completed: true })}>Complete</button>
+}
+```
+
+## Infinite Queries
+
+Type infinite scroll queries:
+
+```tsx
+import { useInfiniteQuery } from '@tanstack/react-query'
+import type { InfiniteData } from '@tanstack/react-query'
+
+interface Post {
+  id: number
+  title: string
+}
+
+interface PostsPage {
+  posts: Post[]
+  nextCursor: number | null
+}
+
+function InfinitePosts() {
+  const {
+    data,
+    fetchNextPage,
+    hasNextPage,
+  } = useInfiniteQuery<PostsPage, Error>({
+    queryKey: ['posts'],
+    queryFn: async ({ pageParam = 0 }): Promise<PostsPage> => {
+      const response = await fetch(`/api/posts?cursor=${pageParam}`)
+      return response.json()
+    },
+    initialPageParam: 0,
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
+  })
+
+  // data is typed as InfiniteData<PostsPage> | undefined
+  return (
+    <div>
+      {data?.pages.map((page) =>
+        page.posts.map((post) => <div key={post.id}>{post.title}</div>)
+      )}
+      {hasNextPage && <button onClick={() => fetchNextPage()}>Load More</button>}
+    </div>
+  )
+}
+```
+
+## Type-Safe Query Keys
+
+Define strongly-typed query keys:
+
+```tsx
+// Define query key factory
+const todoKeys = {
+  all: ['todos'] as const,
+  lists: () => [...todoKeys.all, 'list'] as const,
+  list: (filters: string) => [...todoKeys.lists(), { filters }] as const,
+  details: () => [...todoKeys.all, 'detail'] as const,
+  detail: (id: number) => [...todoKeys.details(), id] as const,
+}
+
+// Use in queries
+function TodoList({ filters }: { filters: string }) {
+  const { data } = useQuery({
+    queryKey: todoKeys.list(filters),
+    queryFn: () => fetchTodos(filters),
+  })
+  return <div>...</div>
+}
+
+// Invalidate with type safety
+function TodoActions() {
+  const queryClient = useQueryClient()
+  
+  const invalidateAll = () => {
+    queryClient.invalidateQueries({ queryKey: todoKeys.all })
+  }
+  
+  const invalidateList = () => {
+    queryClient.invalidateQueries({ queryKey: todoKeys.lists() })
+  }
+  
+  return <div>...</div>
+}
+```
+
+<Tip>
+  Using `as const` ensures query keys are readonly tuples, providing better type inference and preventing accidental mutations.
+</Tip>
+
+## Custom Hooks
+
+Create type-safe custom hooks:
+
+```tsx
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import type { UseQueryOptions, UseMutationOptions } from '@tanstack/react-query'
+
+interface Post {
+  id: number
+  title: string
+}
+
+// Custom query hook
+function usePost(
+  postId: number,
+  options?: Omit<UseQueryOptions<Post, Error>, 'queryKey' | 'queryFn'>
+) {
+  return useQuery({
+    queryKey: ['post', postId],
+    queryFn: async (): Promise<Post> => {
+      const response = await fetch(`/api/posts/${postId}`)
+      return response.json()
+    },
+    ...options,
+  })
+}
+
+// Custom mutation hook
+function useCreatePost(
+  options?: UseMutationOptions<Post, Error, { title: string }>
+) {
+  const queryClient = useQueryClient()
+  
+  return useMutation({
+    mutationFn: async (input: { title: string }): Promise<Post> => {
+      const response = await fetch('/api/posts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+      })
+      return response.json()
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['posts'] })
+    },
+    ...options,
+  })
+}
+
+// Usage
+function PostComponent({ postId }: { postId: number }) {
+  const { data: post } = usePost(postId, { staleTime: 5000 })
+  const createPost = useCreatePost({
+    onSuccess: (data) => console.log('Created:', data.title),
+  })
+  
+  return <div>{post?.title}</div>
+}
+```
+
+## Error Types
+
+Define custom error types:
+
+```tsx
+class ApiError extends Error {
+  constructor(
+    message: string,
+    public statusCode: number,
+    public code: string
+  ) {
+    super(message)
+    this.name = 'ApiError'
+  }
+}
+
+function usePosts() {
+  return useQuery<Post[], ApiError>({
+    queryKey: ['posts'],
+    queryFn: async () => {
+      const response = await fetch('/api/posts')
+      if (!response.ok) {
+        throw new ApiError(
+          'Failed to fetch posts',
+          response.status,
+          'FETCH_ERROR'
+        )
+      }
+      return response.json()
+    },
+  })
+}
+
+function PostsList() {
+  const { data, error } = usePosts()
+  
+  if (error) {
+    // error is typed as ApiError
+    return (
+      <div>
+        Error {error.statusCode}: {error.message} ({error.code})
+      </div>
+    )
+  }
+  
+  return <div>...</div>
+}
+```
+
+## Suspense Queries
+
+Use suspense mode with full type safety:
+
+```tsx
+import { useSuspenseQuery } from '@tanstack/react-query'
+import { Suspense } from 'react'
+
+interface User {
+  id: number
+  name: string
+}
+
+function UserProfile({ userId }: { userId: number }) {
+  // data is always defined (never undefined) in suspense mode
+  const { data } = useSuspenseQuery({
+    queryKey: ['user', userId],
+    queryFn: async (): Promise<User> => {
+      const response = await fetch(`/api/users/${userId}`)
+      return response.json()
+    },
+  })
+
+  // No need to check if data exists
+  return <h1>{data.name}</h1>
+}
+
+function App() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <UserProfile userId={1} />
+    </Suspense>
+  )
+}
+```
+
+<Note>
+  `useSuspenseQuery` returns data that is never `undefined`, so you don't need to handle the loading state manually.
+</Note>
+
+## Advanced Types
+
+### Narrowing Types
+
+```tsx
+function usePost(postId: number) {
+  return useQuery({
+    queryKey: ['post', postId],
+    queryFn: () => fetchPost(postId),
+  })
+}
+
+function PostComponent({ postId }: { postId: number }) {
+  const { data, isSuccess } = usePost(postId)
+  
+  if (isSuccess) {
+    // TypeScript knows data is defined here
+    return <h1>{data.title}</h1>
+  }
+  
+  return null
+}
+```
+
+### Discriminated Unions
+
+```tsx
+type Result<T, E = Error> =
+  | { status: 'idle' }
+  | { status: 'loading' }
+  | { status: 'error'; error: E }
+  | { status: 'success'; data: T }
+
+function QueryResult({ result }: { result: Result<Post[]> }) {
+  switch (result.status) {
+    case 'idle':
+      return <div>Idle</div>
+    case 'loading':
+      return <div>Loading...</div>
+    case 'error':
+      return <div>Error: {result.error.message}</div>
+    case 'success':
+      return <ul>{result.data.map(post => <li key={post.id}>{post.title}</li>)}</ul>
+  }
+}
+```
+
+## Type Utilities
+
+React Query exports helpful type utilities:
+
+```tsx
+import type {
+  QueryKey,
+  QueryFunction,
+  UseQueryResult,
+  UseMutationResult,
+  InfiniteData,
+  QueryClient,
+} from '@tanstack/react-query'
+
+// Extract data type from query result
+type PostData = UseQueryResult<Post[]>['data']
+
+// Extract error type
+type PostError = UseQueryResult<Post[], CustomError>['error']
+
+// InfiniteData type for infinite queries
+type InfinitePostsData = InfiniteData<PostsPage>
+```
+
+<Warning>
+  Always use `import type` for type-only imports to ensure they're removed during compilation and don't affect bundle size.
+</Warning>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="DevTools" icon="wrench" href="/frameworks/react/devtools">
+    Debug type issues with React Query DevTools
+  </Card>
+  <Card title="Server-Side Rendering" icon="server" href="/frameworks/react/ssr">
+    Type-safe SSR with Next.js
+  </Card>
+</CardGroup>

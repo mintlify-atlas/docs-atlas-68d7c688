@@ -1,0 +1,248 @@
+---
+title: Svelte Query Overview
+description: Powerful asynchronous state management for Svelte 5 applications using TanStack Query
+---
+
+Svelte Query is the official TanStack Query adapter for Svelte 5, providing powerful and type-safe data synchronization for your Svelte applications.
+
+## What is Svelte Query?
+
+Svelte Query brings all the power of TanStack Query to Svelte 5, leveraging Svelte's modern reactivity system with runes (`$state`, `$derived`, `$effect`) to provide:
+
+- **Automatic background refetching** - Keep your data fresh without manual intervention
+- **Window focus refetching** - Automatically update when users return to your app
+- **Request deduplication** - Eliminate redundant network requests
+- **Optimistic updates** - Update UI instantly before server confirmation
+- **Built-in caching** - Intelligent cache management with automatic garbage collection
+- **Pagination & infinite scroll** - First-class support for complex data loading patterns
+- **TypeScript support** - Full type inference and type safety
+- **DevTools** - Visualize and debug your queries in real-time
+
+## Core Concepts
+
+Svelte Query provides reactive primitives that integrate seamlessly with Svelte 5's rune-based reactivity:
+
+### Queries
+
+Queries are used for fetching data. They automatically cache results and handle refetching, error states, and loading states.
+
+```svelte
+<script lang="ts">
+import { createQuery } from '@tanstack/svelte-query'
+
+const postsQuery = createQuery(() => ({
+  queryKey: ['posts'],
+  queryFn: async () => {
+    const response = await fetch('/api/posts')
+    return response.json()
+  }
+}))
+</script>
+
+{#if postsQuery.isPending}
+  <p>Loading...</p>
+{:else if postsQuery.isError}
+  <p>Error: {postsQuery.error.message}</p>
+{:else}
+  <ul>
+    {#each postsQuery.data as post}
+      <li>{post.title}</li>
+    {/each}
+  </ul>
+{/if}
+```
+
+### Mutations
+
+Mutations are used for creating, updating, or deleting data. They provide callbacks for side effects and optimistic updates.
+
+```svelte
+<script lang="ts">
+import { createMutation, useQueryClient } from '@tanstack/svelte-query'
+
+const queryClient = useQueryClient()
+
+const addPostMutation = createMutation(() => ({
+  mutationFn: async (newPost) => {
+    const response = await fetch('/api/posts', {
+      method: 'POST',
+      body: JSON.stringify(newPost)
+    })
+    return response.json()
+  },
+  onSuccess: () => {
+    queryClient.invalidateQueries({ queryKey: ['posts'] })
+  }
+}))
+</script>
+
+<button onclick={() => addPostMutation.mutate({ title: 'New Post' })}>
+  Add Post
+</button>
+```
+
+### Infinite Queries
+
+Infinite queries handle paginated data that can be loaded incrementally.
+
+```svelte
+<script lang="ts">
+import { createInfiniteQuery } from '@tanstack/svelte-query'
+
+const planetsQuery = createInfiniteQuery(() => ({
+  queryKey: ['planets'],
+  queryFn: async ({ pageParam = 1 }) => {
+    const response = await fetch(`/api/planets?page=${pageParam}`)
+    return response.json()
+  },
+  initialPageParam: 1,
+  getNextPageParam: (lastPage) => lastPage.nextPage
+}))
+</script>
+
+{#if planetsQuery.data}
+  {#each planetsQuery.data.pages as page}
+    {#each page.results as planet}
+      <div>{planet.name}</div>
+    {/each}
+  {/each}
+  
+  <button 
+    onclick={() => planetsQuery.fetchNextPage()}
+    disabled={!planetsQuery.hasNextPage}
+  >
+    Load More
+  </button>
+{/if}
+```
+
+## Key Features
+
+<Note>
+  Svelte Query is built specifically for Svelte 5 and uses modern Svelte runes for optimal reactivity and performance.
+</Note>
+
+### Reactive by Default
+
+All query results are reactive and automatically update your UI when data changes. The library uses Svelte 5's `$state` and `$derived` runes internally for fine-grained reactivity.
+
+### Type-Safe
+
+Full TypeScript support with automatic type inference:
+
+```typescript
+interface Post {
+  id: number
+  title: string
+  body: string
+}
+
+const query = createQuery<Post[], Error>(() => ({
+  queryKey: ['posts'],
+  queryFn: fetchPosts
+}))
+
+// query.data is typed as Post[] | undefined
+// query.error is typed as Error | null
+```
+
+### Automatic Refetching
+
+Data automatically refetches when:
+- Component mounts (configurable)
+- Window regains focus
+- Network reconnects
+- Custom refetch intervals
+
+### Smart Caching
+
+Queries are cached by their `queryKey` and shared across your application:
+
+```svelte
+<!-- Component A -->
+const posts = createQuery(() => ({ queryKey: ['posts'], queryFn: fetchPosts }))
+
+<!-- Component B - reuses the same cache -->
+const posts = createQuery(() => ({ queryKey: ['posts'], queryFn: fetchPosts }))
+```
+
+## Architecture
+
+Svelte Query follows a provider-based architecture:
+
+```svelte
+<!-- +layout.svelte -->
+<script lang="ts">
+import { QueryClient, QueryClientProvider } from '@tanstack/svelte-query'
+
+const queryClient = new QueryClient()
+const { children } = $props()
+</script>
+
+<QueryClientProvider client={queryClient}>
+  {@render children()}
+</QueryClientProvider>
+```
+
+All child components can then use `createQuery`, `createMutation`, and other hooks which will automatically access the `QueryClient` from context.
+
+## Performance
+
+Svelte Query is designed for optimal performance:
+
+- **Request deduplication** - Multiple components requesting the same data result in a single network request
+- **Automatic garbage collection** - Unused queries are automatically removed from cache
+- **Structural sharing** - Query results are structurally shared to minimize re-renders
+- **Fine-grained reactivity** - Only components using specific query properties re-render when those properties change
+
+## Comparison with Other Solutions
+
+| Feature | Svelte Query | Manual Fetch | Svelte Stores |
+|---------|--------------|--------------|---------------|
+| Caching | ✅ Automatic | ❌ Manual | ❌ Manual |
+| Background Refetching | ✅ Built-in | ❌ Manual | ❌ Manual |
+| Request Deduplication | ✅ Automatic | ❌ None | ❌ Manual |
+| TypeScript | ✅ Full Support | ⚠️ Partial | ⚠️ Partial |
+| DevTools | ✅ Yes | ❌ No | ❌ No |
+| Optimistic Updates | ✅ Built-in | ❌ Manual | ❌ Manual |
+| Pagination | ✅ First-class | ❌ Manual | ❌ Manual |
+
+## Next Steps
+
+<Steps>
+  <Step title="Install Svelte Query">
+    Get started by installing the package and setting up your first query client.
+    
+    [Installation Guide →](/frameworks/svelte/installation)
+  </Step>
+  
+  <Step title="Quick Start">
+    Learn the basics with a step-by-step tutorial.
+    
+    [Quick Start →](/frameworks/svelte/quick-start)
+  </Step>
+  
+  <Step title="TypeScript">
+    Configure TypeScript for maximum type safety.
+    
+    [TypeScript Guide →](/frameworks/svelte/typescript)
+  </Step>
+  
+  <Step title="DevTools">
+    Install and configure the Svelte Query DevTools.
+    
+    [DevTools Setup →](/frameworks/svelte/devtools)
+  </Step>
+</Steps>
+
+## Community
+
+Svelte Query is part of the TanStack family of libraries:
+
+- [GitHub Repository](https://github.com/TanStack/query)
+- [Discord Community](https://tlinz.com/discord)
+- [Twitter Updates](https://twitter.com/tannerlinsley)
+
+<Tip>
+  Svelte Query is maintained by [Lachlan Collins](https://github.com/TanStack/query/tree/main/packages/svelte-query) and the TanStack team.
+</Tip>

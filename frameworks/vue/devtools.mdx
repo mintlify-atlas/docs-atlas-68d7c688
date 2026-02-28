@@ -1,0 +1,451 @@
+---
+title: DevTools
+description: Debug and inspect Vue Query with Vue DevTools integration
+---
+
+# Vue Query DevTools
+
+Vue Query integrates with Vue DevTools to provide powerful debugging and inspection capabilities for your queries and mutations.
+
+## Overview
+
+The Vue Query DevTools plugin adds a dedicated inspector to Vue DevTools where you can:
+
+- View all active queries in your application
+- Inspect query state, data, and metadata
+- Manually trigger refetches, invalidations, and resets
+- Monitor query cache updates in real-time
+- Debug query lifecycle events with timeline integration
+- Toggle online/offline mode for testing
+- Force loading or error states for development
+
+<Note>
+Vue Query DevTools are automatically disabled in production builds. They only work in `development` mode.
+</Note>
+
+## Installation
+
+DevTools are included in the main `@tanstack/vue-query` package. No additional installation is required.
+
+## Setup
+
+<Steps>
+
+### 1. Enable DevTools Plugin
+
+Enable the DevTools plugin when installing VueQueryPlugin:
+
+```typescript main.ts
+import { createApp } from 'vue'
+import { VueQueryPlugin } from '@tanstack/vue-query'
+import App from './App.vue'
+
+const app = createApp(App)
+
+app.use(VueQueryPlugin, {
+  enableDevtoolsV6Plugin: true,
+})
+
+app.mount('#app')
+```
+
+### 2. Install Vue DevTools
+
+If you don't have Vue DevTools installed:
+
+- **Browser Extension**: Install from [Chrome Web Store](https://chrome.google.com/webstore/detail/vuejs-devtools/nhdogjmejiglipccpnnnanhbledajbpd) or [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/vue-js-devtools/)
+- **Standalone App**: Install via npm for use with any browser
+
+```bash
+npm install -g @vue/devtools
+vue-devtools
+```
+
+### 3. Open DevTools
+
+Open your browser's DevTools (F12) and look for the "Vue" tab. You should see a "Vue Query" inspector in the sidebar.
+
+</Steps>
+
+## DevTools Interface
+
+### Query Inspector
+
+The main inspector shows all queries in your cache:
+
+```
+┌─────────────────────────────────────┐
+│ Vue Query                           │
+├─────────────────────────────────────┤
+│ 🟢 ['todos'] [3]                    │
+│ 🟢 ['user', 1] [1]                  │
+│ 🔴 ['posts'] [2]                    │
+│ 🟡 ['comments'] [0]                 │
+└─────────────────────────────────────┘
+```
+
+Each query shows:
+- **Status Badge**: Color-coded query state (🟢 success, 🔴 error, 🟡 pending)
+- **Query Key**: The unique identifier for the query
+- **Observer Count**: Number of active observers `[n]`
+
+### Query Details Panel
+
+Click any query to see detailed information:
+
+#### Query Details
+
+- **Query Key**: The full query key
+- **Query Status**: Current status (success, error, pending)
+- **Observers**: Number of components watching this query
+- **Last Updated**: Timestamp of last successful fetch
+
+#### Data Explorer
+
+Inspect the current query data with full object explorer:
+
+```json
+{
+  "id": 1,
+  "title": "Learn Vue Query",
+  "completed": false,
+  "user": {
+    "id": 10,
+    "name": "John Doe"
+  }
+}
+```
+
+#### Query Explorer
+
+View the complete Query object including:
+
+- State (data, error, status, timestamps)
+- Options (staleTime, cacheTime, retry config)
+- Observers array
+- Internal metadata
+
+### Query Actions
+
+The DevTools provide quick actions for each query:
+
+<Steps>
+
+### Refetch
+
+Manually trigger a refetch of the query:
+
+```typescript
+// Equivalent to:
+queryClient.refetchQueries({ queryKey: ['todos'] })
+```
+
+Use the **Refetch** button (🔄 icon) to force a fresh fetch.
+
+### Invalidate
+
+Mark the query as stale and trigger refetch:
+
+```typescript
+// Equivalent to:
+queryClient.invalidateQueries({ queryKey: ['todos'] })
+```
+
+Use the **Invalidate** button (⏰ icon).
+
+### Reset
+
+Reset the query to its initial state:
+
+```typescript
+// Equivalent to:
+queryClient.resetQueries({ queryKey: ['todos'] })
+```
+
+Use the **Reset** button (↻ icon).
+
+### Remove
+
+Remove the query from the cache entirely:
+
+```typescript
+// Equivalent to:
+queryClient.removeQueries({ queryKey: ['todos'] })
+```
+
+Use the **Remove** button (🗑️ icon).
+
+<Warning>
+Removing a query deletes all cached data. Active observers will immediately refetch.
+</Warning>
+
+### Force Loading
+
+Set the query to loading state for testing:
+
+```typescript
+// Forces the query into pending state
+query.setState({ data: undefined, status: 'pending' })
+```
+
+Use the **Force Loading** button (⏳ icon).
+
+### Force Error
+
+Set the query to error state for testing:
+
+```typescript
+// Forces the query into error state
+query.setState({
+  data: undefined,
+  status: 'error',
+  error: new Error('Unknown error from devtools'),
+})
+```
+
+Use the **Force Error** button (⚠️ icon).
+
+</Steps>
+
+## Timeline Integration
+
+Vue Query integrates with Vue DevTools Timeline to track query events:
+
+### Query Events
+
+The timeline shows:
+
+- **Query Added**: When a new query is created
+- **Query Updated**: When query data changes
+- **Query Removed**: When a query is removed from cache
+
+Each event includes:
+
+- Query hash for identification
+- Timestamp
+- Full event data
+
+```
+Timeline:
+├─ 12:34:56 Query Added ['todos']
+├─ 12:34:57 Query Updated ['todos']
+├─ 12:35:02 Query Updated ['user', 1]
+└─ 12:35:10 Query Removed ['old-data']
+```
+
+## DevTools Settings
+
+Customize DevTools behavior with built-in settings:
+
+### Sort Cache Entries
+
+Change the sort order of queries:
+
+- **ASC**: Ascending order (default)
+- **DESC**: Descending order
+
+### Sort Function
+
+Choose how queries are sorted:
+
+- By query key
+- By last update time
+- By observer count
+- By status
+
+### Online Mode
+
+Toggle online/offline mode to test reconnection behavior:
+
+- **Online**: Normal operation (default)
+- **Offline**: Simulates network disconnection
+
+```typescript
+// Programmatically control online status
+import { onlineManager } from '@tanstack/vue-query'
+
+onlineManager.setOnline(false) // Go offline
+onlineManager.setOnline(true)  // Go back online
+```
+
+<Tip>
+Use offline mode to test how your app behaves without network connectivity, including `refetchOnReconnect` behavior.
+</Tip>
+
+## Filtering Queries
+
+Use the search box to filter queries by query key:
+
+```
+Search: user
+
+Results:
+├─ ['user', 1]
+├─ ['user', 2]
+└─ ['users', 'list']
+```
+
+The filter uses fuzzy matching to find relevant queries.
+
+## DevTools Configuration
+
+Customize DevTools behavior when setting up the plugin:
+
+```typescript
+import { VueQueryPlugin, QueryClient } from '@tanstack/vue-query'
+
+const queryClient = new QueryClient()
+
+app.use(VueQueryPlugin, {
+  queryClient,
+  enableDevtoolsV6Plugin: process.env.NODE_ENV === 'development',
+  queryClientKey: 'custom-key', // Custom injection key
+})
+```
+
+### Environment-Based Setup
+
+Only enable DevTools in development:
+
+```typescript
+const enableDevtools = import.meta.env.DEV
+
+app.use(VueQueryPlugin, {
+  enableDevtoolsV6Plugin: enableDevtools,
+})
+```
+
+## Debugging Common Issues
+
+### Queries Not Showing Up
+
+<Steps>
+
+1. **Verify plugin is enabled**: Check that `enableDevtoolsV6Plugin: true` is set
+2. **Check environment**: DevTools only work in development mode
+3. **Confirm Vue DevTools is installed**: Ensure the browser extension is active
+4. **Restart DevTools**: Close and reopen browser DevTools
+
+</Steps>
+
+### DevTools Performance Impact
+
+DevTools add minimal overhead, but with many queries:
+
+```typescript
+// Disable in production automatically
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      // DevTools won't affect these settings
+      staleTime: 5000,
+    },
+  },
+})
+```
+
+<Note>
+DevTools code is tree-shaken from production builds, so there's zero runtime cost in production.
+</Note>
+
+### Multiple QueryClient Instances
+
+When using multiple clients, specify which to debug:
+
+```typescript
+// Primary client with DevTools
+app.use(VueQueryPlugin, {
+  queryClient: primaryClient,
+  enableDevtoolsV6Plugin: true,
+  queryClientKey: 'primary',
+})
+
+// Secondary client without DevTools
+app.use(VueQueryPlugin, {
+  queryClient: secondaryClient,
+  enableDevtoolsV6Plugin: false,
+  queryClientKey: 'secondary',
+})
+```
+
+## DevTools API
+
+Vue Query uses `@vue/devtools-api` for integration:
+
+```typescript
+import { setupDevtoolsPlugin } from '@vue/devtools-api'
+import type { CustomInspectorNode } from '@vue/devtools-api'
+
+// This is handled internally by Vue Query
+setupDevtoolsPlugin({
+  id: 'vue-query',
+  label: 'Vue Query',
+  packageName: 'vue-query',
+  homepage: 'https://tanstack.com/query/latest',
+  app,
+}, (api) => {
+  // DevTools plugin implementation
+})
+```
+
+<Note>
+You don't need to interact with the DevTools API directly. Vue Query handles all integration automatically.
+</Note>
+
+## Best Practices
+
+### Development Workflow
+
+1. **Use Query Keys Consistently**: Descriptive query keys make debugging easier
+2. **Monitor Observer Counts**: High counts may indicate unnecessary re-renders
+3. **Check Stale/Fresh Status**: Verify your `staleTime` configuration is working
+4. **Test Error States**: Use "Force Error" to test error handling
+5. **Inspect Timeline**: Track query lifecycle to understand refetch behavior
+
+### Debugging Strategies
+
+```vue Component.vue
+<script setup>
+import { useQuery, useQueryClient } from '@tanstack/vue-query'
+
+// Descriptive query keys help in DevTools
+const { data } = useQuery({
+  queryKey: ['user', userId.value, 'profile'],
+  queryFn: fetchUserProfile,
+})
+
+// Access client for debugging
+const queryClient = useQueryClient()
+
+// Log cache state
+const logCache = () => {
+  const cache = queryClient.getQueryCache().getAll()
+  console.log('Cache state:', cache)
+}
+</script>
+```
+
+### Performance Monitoring
+
+Use DevTools to identify performance issues:
+
+- **Too Many Observers**: May indicate component re-render issues
+- **Frequent Updates**: Check if `staleTime` is too aggressive
+- **Large Cache**: Consider reducing `gcTime` or using `removeQueries`
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="rocket" href="/frameworks/vue/quick-start">
+    Learn basic usage
+  </Card>
+  <Card title="TypeScript" icon="code" href="/frameworks/vue/typescript">
+    Type-safe development
+  </Card>
+  <Card title="API Reference" icon="book" href="/api/vue/useQuery">
+    Complete API documentation
+  </Card>
+  <Card title="Examples" icon="flask" href="/examples/vue">
+    Real-world examples
+  </Card>
+</CardGroup>

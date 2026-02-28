@@ -1,0 +1,394 @@
+---
+title: useInfiniteQuery
+description: API reference for the useInfiniteQuery hook
+---
+
+The `useInfiniteQuery` hook is used for fetching paginated or infinite scrolling data. It manages multiple pages of data and provides helpers for loading more pages.
+
+## Import
+
+```typescript
+import { useInfiniteQuery } from '@tanstack/react-query'
+```
+
+## Signature
+
+```typescript
+function useInfiniteQuery<
+  TQueryFnData,
+  TError = DefaultError,
+  TData = InfiniteData<TQueryFnData>,
+  TQueryKey extends QueryKey = QueryKey,
+  TPageParam = unknown,
+>(
+  options: UseInfiniteQueryOptions<TQueryFnData, TError, TData, TQueryKey, TPageParam>,
+  queryClient?: QueryClient,
+): UseInfiniteQueryResult<TData, TError>
+```
+
+## Parameters
+
+<ParamField path="options" type="object" required>
+  The infinite query options object.
+
+  <Expandable title="properties">
+    <ParamField path="queryKey" type="QueryKey" required>
+      A unique key for the query. Must be an array.
+      
+      ```typescript
+      queryKey: ['projects']
+      queryKey: ['projects', { status: 'active' }]
+      ```
+    </ParamField>
+
+    <ParamField path="queryFn" type="QueryFunction<TQueryFnData, TQueryKey, TPageParam>" required>
+      The function that fetches data for each page. Receives a `QueryFunctionContext` with:
+      - `queryKey: TQueryKey` - The query key
+      - `pageParam: TPageParam` - The current page parameter
+      - `signal: AbortSignal` - AbortSignal for cancellation
+      - `meta: QueryMeta | undefined` - Optional metadata
+      - `direction: FetchDirection` - Direction of pagination (`'forward'` or `'backward'`)
+      
+      ```typescript
+      queryFn: async ({ pageParam }) => {
+        const response = await fetch(`/api/projects?cursor=${pageParam}`)
+        return response.json()
+      }
+      ```
+    </ParamField>
+
+    <ParamField path="initialPageParam" type="TPageParam" required>
+      The default page parameter to use when fetching the first page.
+      
+      ```typescript
+      initialPageParam: 0
+      initialPageParam: undefined
+      initialPageParam: null
+      ```
+    </ParamField>
+
+    <ParamField path="getNextPageParam" type="(lastPage: TQueryFnData, allPages: TQueryFnData[], lastPageParam: TPageParam, allPageParams: TPageParam[]) => TPageParam | undefined | null" required>
+      Function to determine the next page parameter. Return `undefined` or `null` to indicate no more pages.
+      
+      ```typescript
+      getNextPageParam: (lastPage, allPages, lastPageParam) => lastPage.nextCursor
+      getNextPageParam: (lastPage) => lastPage.nextId ?? undefined
+      ```
+    </ParamField>
+
+    <ParamField path="getPreviousPageParam" type="(firstPage: TQueryFnData, allPages: TQueryFnData[], firstPageParam: TPageParam, allPageParams: TPageParam[]) => TPageParam | undefined | null">
+      Function to determine the previous page parameter. Return `undefined` or `null` to indicate no more pages.
+      
+      ```typescript
+      getPreviousPageParam: (firstPage) => firstPage.prevCursor ?? undefined
+      ```
+    </ParamField>
+
+    <ParamField path="maxPages" type="number">
+      Maximum number of pages to store in the data. When the maximum is reached, fetching a new page will remove the furthest page from the opposite direction.
+      
+      ```typescript
+      maxPages: 3
+      ```
+    </ParamField>
+
+    <ParamField path="enabled" type="boolean | ((query: Query) => boolean)" default="true">
+      Set to `false` to disable automatic execution.
+    </ParamField>
+
+    <ParamField path="staleTime" type="number | 'static' | ((query: Query) => number | 'static')" default="0">
+      The time in milliseconds after data is considered stale.
+    </ParamField>
+
+    <ParamField path="gcTime" type="number" default="300000">
+      The time in milliseconds that unused/inactive cache data remains in memory.
+    </ParamField>
+
+    <ParamField path="refetchInterval" type="number | false | ((query: Query) => number | false)" default="false">
+      If set to a number, the query will continuously refetch at this frequency.
+    </ParamField>
+
+    <ParamField path="refetchIntervalInBackground" type="boolean" default="false">
+      If `true`, refetch will continue while the tab is in the background.
+    </ParamField>
+
+    <ParamField path="refetchOnWindowFocus" type="boolean | 'always' | ((query: Query) => boolean | 'always')" default="true">
+      Refetch on window focus behavior.
+    </ParamField>
+
+    <ParamField path="refetchOnReconnect" type="boolean | 'always' | ((query: Query) => boolean | 'always')" default="true">
+      Refetch on reconnect behavior.
+    </ParamField>
+
+    <ParamField path="refetchOnMount" type="boolean | 'always' | ((query: Query) => boolean | 'always')" default="true">
+      Refetch on mount behavior.
+    </ParamField>
+
+    <ParamField path="retry" type="boolean | number | ((failureCount: number, error: TError) => boolean)" default="3">
+      Retry configuration for failed queries.
+    </ParamField>
+
+    <ParamField path="retryDelay" type="number | ((failureCount: number, error: TError) => number)">
+      Delay between retries in milliseconds.
+    </ParamField>
+
+    <ParamField path="select" type="(data: InfiniteData<TQueryFnData, TPageParam>) => TData">
+      Transform or select part of the infinite data.
+      
+      ```typescript
+      select: data => ({
+        pages: data.pages.map(page => page.items).flat(),
+        pageParams: data.pageParams,
+      })
+      ```
+    </ParamField>
+
+    <ParamField path="throwOnError" type="boolean | ((error: TError, query: Query) => boolean)" default="false">
+      Set to `true` to throw errors to an error boundary.
+    </ParamField>
+
+    <ParamField path="networkMode" type="'online' | 'always' | 'offlineFirst'" default="'online'">
+      Network mode configuration.
+    </ParamField>
+
+    <ParamField path="meta" type="Record<string, unknown>">
+      Optional metadata.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="queryClient" type="QueryClient">
+  Override the default QueryClient.
+</ParamField>
+
+## Returns
+
+<ResponseField name="UseInfiniteQueryResult<TData, TError>" type="object">
+  The infinite query result object.
+
+  <Expandable title="properties">
+    <ResponseField name="data" type="InfiniteData<TQueryFnData, TPageParam> | undefined">
+      The aggregated data object containing all pages and page parameters.
+      
+      ```typescript
+      {
+        pages: TQueryFnData[],
+        pageParams: TPageParam[]
+      }
+      ```
+    </ResponseField>
+
+    <ResponseField name="error" type="TError | null">
+      The error object for the query, if an error was thrown.
+    </ResponseField>
+
+    <ResponseField name="status" type="'pending' | 'error' | 'success'">
+      The status of the query.
+    </ResponseField>
+
+    <ResponseField name="fetchStatus" type="'fetching' | 'paused' | 'idle'">
+      The fetch status of the query.
+    </ResponseField>
+
+    <ResponseField name="isPending" type="boolean">
+      `true` if the query is in pending state.
+    </ResponseField>
+
+    <ResponseField name="isLoading" type="boolean">
+      `true` if the first fetch is in progress.
+    </ResponseField>
+
+    <ResponseField name="isFetching" type="boolean">
+      `true` if the queryFn is executing.
+    </ResponseField>
+
+    <ResponseField name="isSuccess" type="boolean">
+      `true` if the query has succeeded.
+    </ResponseField>
+
+    <ResponseField name="isError" type="boolean">
+      `true` if the query has errored.
+    </ResponseField>
+
+    <ResponseField name="hasNextPage" type="boolean">
+      `true` if there is a next page to fetch (determined by `getNextPageParam`).
+    </ResponseField>
+
+    <ResponseField name="hasPreviousPage" type="boolean">
+      `true` if there is a previous page to fetch (determined by `getPreviousPageParam`).
+    </ResponseField>
+
+    <ResponseField name="isFetchingNextPage" type="boolean">
+      `true` while fetching the next page with `fetchNextPage`.
+    </ResponseField>
+
+    <ResponseField name="isFetchingPreviousPage" type="boolean">
+      `true` while fetching the previous page with `fetchPreviousPage`.
+    </ResponseField>
+
+    <ResponseField name="isFetchNextPageError" type="boolean">
+      `true` if the query failed while fetching the next page.
+    </ResponseField>
+
+    <ResponseField name="isFetchPreviousPageError" type="boolean">
+      `true` if the query failed while fetching the previous page.
+    </ResponseField>
+
+    <ResponseField name="fetchNextPage" type="(options?: FetchNextPageOptions) => Promise<UseInfiniteQueryResult>">
+      Function to fetch the next page of results.
+      
+      ```typescript
+      fetchNextPage({ cancelRefetch: true })
+      ```
+    </ResponseField>
+
+    <ResponseField name="fetchPreviousPage" type="(options?: FetchPreviousPageOptions) => Promise<UseInfiniteQueryResult>">
+      Function to fetch the previous page of results.
+      
+      ```typescript
+      fetchPreviousPage({ cancelRefetch: true })
+      ```
+    </ResponseField>
+
+    <ResponseField name="refetch" type="(options?: RefetchOptions) => Promise<UseInfiniteQueryResult>">
+      Function to manually refetch all pages.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Examples
+
+### Cursor-based Pagination
+
+```typescript
+import { useInfiniteQuery } from '@tanstack/react-query'
+
+interface Project {
+  id: number
+  name: string
+}
+
+interface ProjectsResponse {
+  data: Project[]
+  nextCursor?: number
+}
+
+function Projects() {
+  const {
+    data,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery({
+    queryKey: ['projects'],
+    queryFn: async ({ pageParam }) => {
+      const response = await fetch(`/api/projects?cursor=${pageParam}`)
+      return response.json() as Promise<ProjectsResponse>
+    },
+    initialPageParam: 0,
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
+  })
+
+  return (
+    <div>
+      {data?.pages.map((page, i) => (
+        <div key={i}>
+          {page.data.map(project => (
+            <div key={project.id}>{project.name}</div>
+          ))}
+        </div>
+      ))}
+      <button
+        onClick={() => fetchNextPage()}
+        disabled={!hasNextPage || isFetchingNextPage}
+      >
+        {isFetchingNextPage
+          ? 'Loading more...'
+          : hasNextPage
+            ? 'Load More'
+            : 'Nothing more to load'}
+      </button>
+    </div>
+  )
+}
+```
+
+### Offset/Limit Pagination
+
+```typescript
+const { data, fetchNextPage, hasNextPage } = useInfiniteQuery({
+  queryKey: ['projects'],
+  queryFn: async ({ pageParam }) => {
+    const response = await fetch(
+      `/api/projects?limit=10&offset=${pageParam}`
+    )
+    return response.json()
+  },
+  initialPageParam: 0,
+  getNextPageParam: (lastPage, allPages, lastPageParam) => {
+    if (lastPage.length === 0) return undefined
+    return lastPageParam + 10
+  },
+})
+```
+
+### Bi-directional Pagination
+
+```typescript
+const {
+  data,
+  fetchNextPage,
+  fetchPreviousPage,
+  hasNextPage,
+  hasPreviousPage,
+} = useInfiniteQuery({
+  queryKey: ['projects'],
+  queryFn: async ({ pageParam }) => fetchProjects(pageParam),
+  initialPageParam: 0,
+  getNextPageParam: (lastPage) => lastPage.nextCursor,
+  getPreviousPageParam: (firstPage) => firstPage.prevCursor,
+})
+```
+
+### With Max Pages
+
+```typescript
+const { data } = useInfiniteQuery({
+  queryKey: ['projects'],
+  queryFn: fetchProjects,
+  initialPageParam: 0,
+  getNextPageParam: (lastPage) => lastPage.nextCursor,
+  maxPages: 3, // Only keep 3 pages in memory
+})
+```
+
+### Flattening Pages with Select
+
+```typescript
+const { data } = useInfiniteQuery({
+  queryKey: ['projects'],
+  queryFn: fetchProjects,
+  initialPageParam: 0,
+  getNextPageParam: (lastPage) => lastPage.nextCursor,
+  select: data => ({
+    pages: data.pages.flatMap(page => page.data),
+    pageParams: data.pageParams,
+  }),
+})
+
+// data.pages is now a flat array of all items
+```
+
+## Notes
+
+<Note>
+  The `initialPageParam` is required and should match the type of your page parameters.
+</Note>
+
+<Note>
+  Return `undefined` or `null` from `getNextPageParam` to indicate there are no more pages.
+</Note>
+
+<Note>
+  The `data` object has a specific shape: `{ pages: TQueryFnData[], pageParams: TPageParam[] }`
+</Note>

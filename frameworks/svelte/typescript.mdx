@@ -1,0 +1,616 @@
+---
+title: TypeScript
+description: Using TypeScript with Svelte Query for full type safety
+---
+
+Svelte Query is built with TypeScript and provides excellent type safety out of the box. This guide covers how to leverage TypeScript for maximum type inference and safety.
+
+## Type Inference
+
+Svelte Query automatically infers types from your query and mutation functions:
+
+```typescript
+import { createQuery } from '@tanstack/svelte-query'
+
+interface Post {
+  id: number
+  title: string
+  body: string
+  userId: number
+}
+
+const postsQuery = createQuery(() => ({
+  queryKey: ['posts'],
+  queryFn: async (): Promise<Post[]> => {
+    const response = await fetch('/api/posts')
+    return response.json()
+  },
+}))
+
+// postsQuery.data is automatically typed as Post[] | undefined
+// postsQuery.error is typed as Error | null
+```
+
+<Note>
+  The return type of your `queryFn` determines the type of `query.data`. TypeScript will automatically infer this type throughout your component.
+</Note>
+
+## Typing Queries
+
+### Basic Query Types
+
+Explicitly type your queries using generics:
+
+```typescript
+import { createQuery } from '@tanstack/svelte-query'
+import type { CreateQueryResult } from '@tanstack/svelte-query'
+
+interface User {
+  id: number
+  name: string
+  email: string
+}
+
+// Type parameters: <TQueryFnData, TError, TData, TQueryKey>
+const userQuery = createQuery<
+  User,           // Type of data returned by queryFn
+  Error,          // Type of error
+  User,           // Type of data after select transform
+  ['user', number] // Type of query key
+>(() => ({
+  queryKey: ['user', 1],
+  queryFn: async () => {
+    const response = await fetch('/api/user/1')
+    return response.json()
+  },
+}))
+```
+
+### With Data Transformation
+
+When using `select` to transform data, specify both the source and result types:
+
+```typescript
+interface ApiResponse {
+  data: User[]
+  total: number
+  page: number
+}
+
+interface TransformedData {
+  users: User[]
+  count: number
+}
+
+const query = createQuery<
+  ApiResponse,        // Type from queryFn
+  Error,              // Error type
+  TransformedData     // Type after select
+>(() => ({
+  queryKey: ['users'],
+  queryFn: async () => {
+    const response = await fetch('/api/users')
+    return response.json()
+  },
+  select: (data): TransformedData => ({
+    users: data.data,
+    count: data.total,
+  }),
+}))
+
+// query.data is typed as TransformedData | undefined
+```
+
+## Typing Mutations
+
+### Basic Mutation Types
+
+```typescript
+import { createMutation } from '@tanstack/svelte-query'
+import type { CreateMutationResult } from '@tanstack/svelte-query'
+
+interface CreatePostInput {
+  title: string
+  body: string
+}
+
+interface Post {
+  id: number
+  title: string
+  body: string
+  createdAt: string
+}
+
+// Type parameters: <TData, TError, TVariables, TContext>
+const createPostMutation = createMutation<
+  Post,              // Type of data returned by mutationFn
+  Error,             // Type of error
+  CreatePostInput,   // Type of variables passed to mutate()
+  unknown            // Type of context (for optimistic updates)
+>(() => ({
+  mutationFn: async (newPost: CreatePostInput) => {
+    const response = await fetch('/api/posts', {
+      method: 'POST',
+      body: JSON.stringify(newPost),
+    })
+    return response.json()
+  },
+}))
+
+// TypeScript ensures you pass the correct type
+createPostMutation.mutate({
+  title: 'Hello',
+  body: 'World',
+})
+
+// Error: Property 'invalidProp' does not exist
+// createPostMutation.mutate({ invalidProp: 'test' })
+```
+
+### With Context for Optimistic Updates
+
+```typescript
+interface UpdatePostInput {
+  id: number
+  title: string
+}
+
+interface RollbackContext {
+  previousPosts: Post[]
+}
+
+const updatePostMutation = createMutation<
+  Post,
+  Error,
+  UpdatePostInput,
+  RollbackContext  // Context type for rollback
+>(() => ({
+  mutationFn: async (data) => {
+    const response = await fetch(`/api/posts/${data.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    })
+    return response.json()
+  },
+  onMutate: async (newPost) => {
+    await queryClient.cancelQueries({ queryKey: ['posts'] })
+    const previousPosts = queryClient.getQueryData<Post[]>(['posts'])
+    
+    // Return context with proper type
+    return { previousPosts: previousPosts || [] }
+  },
+  onError: (err, variables, context) => {
+    // context is typed as RollbackContext | undefined
+    if (context?.previousPosts) {
+      queryClient.setQueryData(['posts'], context.previousPosts)
+    }
+  },
+}))
+```
+
+## Typing Infinite Queries
+
+```typescript
+import { createInfiniteQuery } from '@tanstack/svelte-query'
+import type { InfiniteData } from '@tanstack/svelte-query'
+
+interface PaginatedResponse {
+  items: Post[]
+  nextCursor: number | null
+  total: number
+}
+
+// Type parameters: <TQueryFnData, TError, TData, TQueryKey, TPageParam>
+const infiniteQuery = createInfiniteQuery<
+  PaginatedResponse,  // Type from queryFn
+  Error,              // Error type  
+  InfiniteData<PaginatedResponse>, // Data type
+  ['posts', 'infinite'], // Query key type
+  number              // Page param type
+>(() => ({
+  queryKey: ['posts', 'infinite'],
+  queryFn: async ({ pageParam }) => {
+    const response = await fetch(`/api/posts?cursor=${pageParam}`)
+    return response.json()
+  },
+  initialPageParam: 0,
+  getNextPageParam: (lastPage) => lastPage.nextCursor,
+  getPreviousPageParam: (firstPage) => firstPage.nextCursor,
+}))
+
+// infiniteQuery.data.pages is typed as PaginatedResponse[]
+```
+
+## Query Options Helper
+
+The `queryOptions` helper provides excellent type inference:
+
+```typescript
+import { queryOptions } from '@tanstack/svelte-query'
+
+// Define reusable, type-safe query options
+export const postQueryOptions = (postId: number) =>
+  queryOptions({
+    queryKey: ['post', postId],
+    queryFn: async (): Promise<Post> => {
+      const response = await fetch(`/api/posts/${postId}`)
+      return response.json()
+    },
+    staleTime: 5 * 60 * 1000,
+  })
+
+// Use in components with full type inference
+const postQuery = createQuery(() => postQueryOptions(1))
+
+// postQuery.data is automatically typed as Post | undefined
+```
+
+<Tip>
+  Using `queryOptions` provides better type inference than inline options and makes queries reusable across components.
+</Tip>
+
+## Typing the Query Client
+
+```typescript
+import { QueryClient, useQueryClient } from '@tanstack/svelte-query'
+
+// Type your QueryClient
+const queryClient: QueryClient = new QueryClient()
+
+// In components
+const client = useQueryClient()
+
+// Type assertions when getting data
+const posts = client.getQueryData<Post[]>(['posts'])
+
+// Type-safe query data updates
+client.setQueryData<Post[]>(['posts'], (oldPosts) => {
+  // oldPosts is typed as Post[] | undefined
+  return oldPosts ? [...oldPosts, newPost] : [newPost]
+})
+```
+
+## Defined Queries
+
+Use `DefinedCreateQueryResult` when you know data will always be available (e.g., with `initialData`):
+
+```typescript
+import type { DefinedCreateQueryResult } from '@tanstack/svelte-query'
+import type {
+  DefinedInitialDataOptions,
+  UndefinedInitialDataOptions,
+} from '@tanstack/svelte-query'
+
+// With initialData, data is never undefined
+const query = createQuery<Post[], Error, Post[]>(() => ({
+  queryKey: ['posts'],
+  queryFn: fetchPosts,
+  initialData: [],
+}))
+
+// query.data is Post[] (not Post[] | undefined)
+```
+
+Or use function overloads:
+
+```typescript
+function useUserQuery(
+  options: UndefinedInitialDataOptions<User>
+): CreateQueryResult<User, Error>
+
+function useUserQuery(
+  options: DefinedInitialDataOptions<User>
+): DefinedCreateQueryResult<User, Error>
+
+function useUserQuery(options: any) {
+  return createQuery(() => options)
+}
+```
+
+## Type-Safe Query Keys
+
+Create type-safe query key factories:
+
+```typescript
+export const queryKeys = {
+  posts: {
+    all: ['posts'] as const,
+    lists: () => [...queryKeys.posts.all, 'list'] as const,
+    list: (filters: PostFilters) =>
+      [...queryKeys.posts.lists(), filters] as const,
+    details: () => [...queryKeys.posts.all, 'detail'] as const,
+    detail: (id: number) => [...queryKeys.posts.details(), id] as const,
+  },
+  users: {
+    all: ['users'] as const,
+    detail: (id: number) => [...queryKeys.users.all, id] as const,
+  },
+} as const
+
+// Usage with full type safety
+const postQuery = createQuery(() => ({
+  queryKey: queryKeys.posts.detail(1),
+  queryFn: () => fetchPost(1),
+}))
+
+// Invalidate with type safety
+queryClient.invalidateQueries({ queryKey: queryKeys.posts.all })
+```
+
+## Custom Error Types
+
+Define custom error types for better error handling:
+
+```typescript
+interface ApiError {
+  message: string
+  statusCode: number
+  errors?: Record<string, string[]>
+}
+
+class FetchError extends Error {
+  statusCode: number
+  errors?: Record<string, string[]>
+
+  constructor(error: ApiError) {
+    super(error.message)
+    this.statusCode = error.statusCode
+    this.errors = error.errors
+  }
+}
+
+const query = createQuery<Post[], FetchError>(() => ({
+  queryKey: ['posts'],
+  queryFn: async () => {
+    const response = await fetch('/api/posts')
+    if (!response.ok) {
+      const error = await response.json()
+      throw new FetchError(error)
+    }
+    return response.json()
+  },
+}))
+
+// query.error is typed as FetchError | null
+{#if query.isError}
+  <p>Error {query.error.statusCode}: {query.error.message}</p>
+  {#if query.error.errors}
+    <ul>
+      {#each Object.entries(query.error.errors) as [field, messages]}
+        <li>{field}: {messages.join(', ')}</li>
+      {/each}
+    </ul>
+  {/if}
+{/if}
+```
+
+## Accessor Type
+
+Svelte Query uses the `Accessor` type for reactive options:
+
+```typescript
+import type { Accessor } from '@tanstack/svelte-query'
+
+// Accessor is simply a function that returns a value
+type Accessor<T> = () => T
+
+// This is why you pass functions to createQuery
+const query = createQuery(() => ({ // <-- Accessor function
+  queryKey: ['posts'],
+  queryFn: fetchPosts,
+}))
+```
+
+This allows the query to track dependencies and refetch when they change:
+
+```typescript
+let userId = $state(1)
+
+// The accessor function captures userId
+const userQuery = createQuery(() => ({
+  queryKey: ['user', userId], // userId is reactive
+  queryFn: () => fetchUser(userId),
+}))
+
+// When userId changes, the query automatically refetches
+```
+
+## Result Types
+
+All result types are exported for use in your code:
+
+```typescript
+import type {
+  CreateQueryResult,
+  DefinedCreateQueryResult,
+  CreateMutationResult,
+  CreateInfiniteQueryResult,
+  CreateBaseQueryResult,
+} from '@tanstack/svelte-query'
+
+// Use in function signatures
+function usePostQuery(id: number): CreateQueryResult<Post, Error> {
+  return createQuery(() => ({
+    queryKey: ['post', id],
+    queryFn: () => fetchPost(id),
+  }))
+}
+```
+
+## Generic Components
+
+Create reusable components with generic types:
+
+```svelte QueryWrapper.svelte
+<script lang="ts" generics="T, TError extends Error">
+import type { CreateQueryResult } from '@tanstack/svelte-query'
+
+interface Props {
+  query: CreateQueryResult<T, TError>
+  children: Snippet<[T]>
+}
+
+let { query, children }: Props = $props()
+</script>
+
+{#if query.isPending}
+  <div>Loading...</div>
+{:else if query.isError}
+  <div>Error: {query.error.message}</div>
+{:else}
+  {@render children(query.data)}
+{/if}
+```
+
+Usage:
+
+```svelte
+<QueryWrapper {postQuery}>
+  {#snippet children(post)}
+    <h1>{post.title}</h1>
+    <p>{post.body}</p>
+  {/snippet}
+</QueryWrapper>
+```
+
+## Best Practices
+
+<Steps>
+  <Step title="Always type your data">
+    Define interfaces for your API responses:
+
+    ```typescript
+    interface Post {
+      id: number
+      title: string
+      body: string
+    }
+
+    // Not: const query = createQuery(() => ({ ... }))
+    // Better:
+    const query = createQuery<Post[]>(() => ({ ... }))
+    ```
+  </Step>
+
+  <Step title="Use queryOptions for reusability">
+    Create reusable query definitions:
+
+    ```typescript
+    export const postsQueryOptions = queryOptions({
+      queryKey: ['posts'],
+      queryFn: fetchPosts,
+    })
+
+    // Reuse across components
+    const query1 = createQuery(() => postsQueryOptions)
+    const query2 = createQuery(() => postsQueryOptions)
+    ```
+  </Step>
+
+  <Step title="Type your error handling">
+    Use custom error types for better error handling:
+
+    ```typescript
+    const query = createQuery<Post[], ApiError>(() => ({
+      queryKey: ['posts'],
+      queryFn: fetchPosts,
+    }))
+    ```
+  </Step>
+
+  <Step title="Use const assertions for query keys">
+    Make query keys readonly:
+
+    ```typescript
+    const queryKey = ['posts', { status: 'published' }] as const
+    ```
+  </Step>
+</Steps>
+
+## TypeScript Configuration
+
+Recommended `tsconfig.json` settings for Svelte Query:
+
+```json tsconfig.json
+{
+  "extends": "./.svelte-kit/tsconfig.json",
+  "compilerOptions": {
+    "strict": true,
+    "strictNullChecks": true,
+    "esModuleInterop": true,
+    "skipLibCheck": false,
+    "module": "ESNext",
+    "target": "ESNext",
+    "moduleResolution": "bundler"
+  }
+}
+```
+
+<Note>
+  Enable `strict` and `strictNullChecks` for maximum type safety. This ensures you handle `undefined` data properly.
+</Note>
+
+## Troubleshooting
+
+### Type errors with query data
+
+If you get errors like "Object is possibly undefined":
+
+```typescript
+// Problem
+const title = query.data.title // Error: Object is possibly undefined
+
+// Solution 1: Check if data exists
+if (query.data) {
+  const title = query.data.title // OK
+}
+
+// Solution 2: Use optional chaining
+const title = query.data?.title // OK, title is string | undefined
+
+// Solution 3: Use initialData
+const query = createQuery(() => ({
+  queryKey: ['post'],
+  queryFn: fetchPost,
+  initialData: { title: '', body: '' },
+}))
+const title = query.data.title // OK, data is never undefined
+```
+
+### Inference not working
+
+If types aren't being inferred correctly:
+
+```typescript
+// Problem: Return type not inferred
+const query = createQuery(() => ({
+  queryKey: ['posts'],
+  queryFn: async () => {
+    return fetch('/api/posts').then(r => r.json()) // any
+  },
+}))
+
+// Solution: Add explicit return type
+const query = createQuery(() => ({
+  queryKey: ['posts'],
+  queryFn: async (): Promise<Post[]> => {
+    return fetch('/api/posts').then(r => r.json())
+  },
+}))
+```
+
+## Next Steps
+
+<Steps>
+  <Step title="DevTools">
+    Install the Svelte Query DevTools for debugging.
+    
+    [DevTools Setup →](/frameworks/svelte/devtools)
+  </Step>
+  
+  <Step title="Advanced Patterns">
+    Learn advanced TypeScript patterns for queries.
+    
+    [Advanced Guides →](/guides/important-defaults)
+  </Step>
+</Steps>

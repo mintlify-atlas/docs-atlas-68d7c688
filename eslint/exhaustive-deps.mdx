@@ -1,0 +1,275 @@
+---
+title: exhaustive-deps
+description: Ensure all variables used in queryFn are included in the query key
+---
+
+<Note>
+  **Attributes**: ✅ Recommended • 🔧 Fixable
+</Note>
+
+## Overview
+
+Query keys should be seen like a dependency array to your query function: Every variable that is used inside the `queryFn` should be added to the query key. This makes sure that queries are cached independently and that queries are refetched automatically when the variables change.
+
+## Rule Details
+
+This rule enforces that all variables referenced in your query function are included in the query key. This is crucial for proper caching and automatic refetching behavior.
+
+### Why This Matters
+
+1. **Independent Caching**: Different values should create different cache entries
+2. **Automatic Refetching**: Queries refetch when dependencies change
+3. **Stale Data Prevention**: Ensures you're always working with the correct data
+
+## Examples
+
+### Incorrect Code
+
+<CodeGroup>
+```typescript Simple Case
+/* eslint "@tanstack/query/exhaustive-deps": "error" */
+
+useQuery({
+  queryKey: ['todo'],
+  queryFn: () => api.getTodo(todoId), // ❌ todoId not in key
+})
+```
+
+```typescript Query Factory
+const todoQueries = {
+  detail: (id) => ({
+    queryKey: ['todo'], // ❌ id not in key
+    queryFn: () => api.getTodo(id),
+  }),
+}
+```
+
+```typescript Multiple Dependencies
+const { data } = useQuery({
+  queryKey: ['todos'], // ❌ status and page missing
+  queryFn: () => fetchTodos({ status, page }),
+})
+```
+</CodeGroup>
+
+### Correct Code
+
+<CodeGroup>
+```typescript Simple Case
+useQuery({
+  queryKey: ['todo', todoId], // ✅ todoId included
+  queryFn: () => api.getTodo(todoId),
+})
+```
+
+```typescript Query Factory
+const todoQueries = {
+  detail: (id) => ({
+    queryKey: ['todo', id], // ✅ id included
+    queryFn: () => api.getTodo(id),
+  }),
+}
+```
+
+```typescript Multiple Dependencies
+const { data } = useQuery({
+  queryKey: ['todos', status, page], // ✅ all dependencies included
+  queryFn: () => fetchTodos({ status, page }),
+})
+```
+
+```typescript Object in Query Key
+// You can also structure dependencies as objects
+const { data } = useQuery({
+  queryKey: ['todos', { status, page }],
+  queryFn: () => fetchTodos({ status, page }),
+})
+```
+</CodeGroup>
+
+## Common Patterns
+
+### User-Specific Queries
+
+```typescript
+function useUserTodos(userId: string) {
+  return useQuery({
+    queryKey: ['todos', userId],
+    queryFn: () => fetchUserTodos(userId),
+  })
+}
+```
+
+### Filtered Lists
+
+```typescript
+function useTodos(filters: TodoFilters) {
+  return useQuery({
+    queryKey: ['todos', filters],
+    queryFn: () => fetchTodos(filters),
+  })
+}
+```
+
+### Paginated Data
+
+```typescript
+function useTodos(page: number, pageSize: number) {
+  return useQuery({
+    queryKey: ['todos', page, pageSize],
+    queryFn: () => fetchTodos(page, pageSize),
+  })
+}
+```
+
+### Detail Views
+
+```typescript
+function useTodo(id: string, includeComments: boolean) {
+  return useQuery({
+    queryKey: ['todo', id, { includeComments }],
+    queryFn: () => fetchTodo(id, includeComments),
+  })
+}
+```
+
+## What About Constants?
+
+Constants that never change don't need to be in the query key:
+
+```typescript
+const API_URL = 'https://api.example.com' // constant
+
+useQuery({
+  queryKey: ['todos'], // ✅ OK: API_URL doesn't need to be in key
+  queryFn: () => fetch(`${API_URL}/todos`),
+})
+```
+
+However, configuration that might change should be included:
+
+```typescript
+const { apiUrl } = useConfig() // can change
+
+useQuery({
+  queryKey: ['todos', apiUrl], // ✅ Include changing config
+  queryFn: () => fetch(`${apiUrl}/todos`),
+})
+```
+
+## Auto-Fix
+
+This rule is auto-fixable. ESLint can automatically add missing dependencies to your query key:
+
+```bash
+eslint --fix src/
+```
+
+<Warning>
+  Review auto-fixes carefully. The rule may not always detect the optimal query key structure.
+</Warning>
+
+## When to Disable
+
+You might want to disable this rule if:
+
+1. You're using a custom query key factory that handles dependencies differently
+2. You're intentionally sharing cache across different parameters (advanced use case)
+3. You're using a global query function that doesn't depend on variables
+
+```typescript
+// eslint-disable-next-line @tanstack/query/exhaustive-deps
+useQuery({
+  queryKey: ['constant-data'],
+  queryFn: () => fetchConstantData(dynamicParam),
+})
+```
+
+<Warning>
+  Disabling this rule can lead to stale data and caching bugs. Only do so if you fully understand the implications.
+</Warning>
+
+## Best Practices
+
+<Accordion title="Use Query Factories">
+  Create reusable query configurations with proper key structures:
+
+  ```typescript
+  const todoKeys = {
+    all: ['todos'] as const,
+    lists: () => [...todoKeys.all, 'list'] as const,
+    list: (filters: TodoFilters) => [...todoKeys.lists(), filters] as const,
+    details: () => [...todoKeys.all, 'detail'] as const,
+    detail: (id: string) => [...todoKeys.details(), id] as const,
+  }
+
+  // Usage
+  useQuery({
+    queryKey: todoKeys.detail(id),
+    queryFn: () => fetchTodo(id),
+  })
+  ```
+</Accordion>
+
+<Accordion title="Keep Keys Serializable">
+  Ensure all query key values are serializable:
+
+  ```typescript
+  // ✅ Good: primitive values and plain objects
+  queryKey: ['todos', { status: 'active', page: 1 }]
+
+  // ❌ Bad: functions, class instances
+  queryKey: ['todos', () => {}, new Date()]
+  ```
+</Accordion>
+
+<Accordion title="Order Matters">
+  Keep related queries together by using consistent key ordering:
+
+  ```typescript
+  // ✅ Good: consistent hierarchy
+  ['todos'] // all todos
+  ['todos', { status: 'active' }] // filtered todos
+  ['todos', 'detail', id] // specific todo
+
+  // ❌ Bad: inconsistent structure
+  ['todos']
+  [{ status: 'active' }, 'todos']
+  [id, 'todos', 'detail']
+  ```
+</Accordion>
+
+## TypeScript Support
+
+The rule works seamlessly with TypeScript and understands type information:
+
+```typescript
+interface TodoFilters {
+  status: 'active' | 'completed'
+  priority?: 'high' | 'low'
+}
+
+function useTodos(filters: TodoFilters) {
+  return useQuery({
+    queryKey: ['todos', filters], // ✅ Properly typed
+    queryFn: () => fetchTodos(filters),
+  })
+}
+```
+
+## Related Rules
+
+- [no-unstable-deps](./no-unstable-deps) - Prevents unstable values in query keys
+- [stable-query-client](./stable-query-client) - Ensures stable QueryClient instances
+
+## Further Reading
+
+<CardGroup cols={2}>
+  <Card title="Query Keys Guide" href="/guides/query-keys" icon="key">
+    Learn best practices for structuring query keys
+  </Card>
+
+  <Card title="Effective Query Keys" href="https://tkdodo.eu/blog/effective-react-query-keys" icon="blog">
+    TkDodo's guide to query key patterns
+  </Card>
+</CardGroup>
